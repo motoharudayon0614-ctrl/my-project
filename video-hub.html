@@ -183,7 +183,7 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 (function(){
 const PLAT={
   ig:{name:'Instagram',fields:[['followers','フォロワー数'],['posts','投稿本数'],['views','再生数'],['reach','リーチ'],['likes','いいね'],['comments','コメント'],['saves','保存']],eng:['likes','comments','saves']},
-  tt:{name:'TikTok',fields:[['followers','フォロワー数'],['posts','投稿本数'],['views','再生数'],['likes','いいね'],['comments','コメント'],['shares','シェア']],eng:['likes','comments','shares']},
+  tt:{name:'TikTok',fields:[['followers','フォロワー数'],['posts','投稿本数'],['views','再生数'],['likes','いいね'],['comments','コメント'],['shares','シェア'],['saves','保存']],eng:['likes','comments','shares','saves']},
   yt:{name:'YouTube',fields:[['followers','チャンネル登録者'],['posts','投稿本数'],['views','再生回数'],['watchHours','総再生時間(時間)'],['likes','高評価'],['comments','コメント']],eng:['likes','comments']}
 };
 const STATUSES=['企画','撮影待ち','編集中','確認中','修正中','納品済','投稿済'];
@@ -308,7 +308,7 @@ function editClient(c){
     +field({k:'longQuota',label:'YouTube本数/月（空欄=プラン通り）',type:'number',v:c.longQuota})
     +field({k:'startMonth',label:'運用開始月',type:'month',v:c.startMonth})
     +field({k:'active',label:'状態',type:'select',options:[['1','運用中'],['0','停止・終了']],v:c.active===false?'0':'1'})
-    +field({k:'ig',label:'Instagram アカウントURL',v:c.ig,ph:'https://www.instagram.com/…',full:true})
+    +'<div class="full hint">下のURLを登録すると、毎月1日にフォロワー数と動画ごとの再生数・いいね・コメントを自動で取得します（ログイン不要）。</div>'+field({k:'ig',label:'Instagram アカウントURL',v:c.ig,ph:'https://www.instagram.com/…',full:true})
     +field({k:'tt',label:'TikTok アカウントURL',v:c.tt,ph:'https://www.tiktok.com/@…',full:true})
     +field({k:'yt',label:'YouTube チャンネルURL',v:c.yt,ph:'https://www.youtube.com/@…',full:true})
     +field({k:'contact',label:'担当者・連絡先メモ',type:'textarea',v:c.contact,rows:2});
@@ -320,7 +320,7 @@ function editClient(c){
 }
 function editMetrics(cid,m){
   const ex=metricsFor(cid,m)||{};
-  let html='<div class="full hint">'+esc(cName(cid))+' ／ '+mlabel(m)+'の数字を入力します。各SNSのインサイト（管理画面）の月末時点の値を転記してください。投稿本数が空欄なら、制作管理の投稿予定日から自動で数えます。</div>';
+  let html='<div class="full hint">'+esc(cName(cid))+' ／ '+mlabel(m)+'の数字を入力します。アカウントURLを登録したクライアントは毎月1日に公開データから自動で入ります。ここでは足りない数字の追加や修正、所感の記入ができます。投稿本数が空欄なら、制作管理の投稿予定日から自動で数えます。</div>';
   for(const [p,def] of Object.entries(PLAT)){
     html+='<fieldset><legend><span class="pf '+p+'">'+p.toUpperCase()+'</span> '+def.name+'</legend>'+def.fields.map(([k,l])=>{
       const v=ex[p]&&isNum(ex[p][k])?ex[p][k]:'';const ph=k==='posts'?'自動: '+postedCount(cid,m,p):'';
@@ -328,7 +328,7 @@ function editMetrics(cid,m){
   }
   html+=field({k:'note',label:'所感・来月の施策（お客様向けコメント）',type:'textarea',v:ex.note,rows:4});
   openModal('数値入力',html,async()=>{
-    const raw=formVals();const d={clientId:cid,month:m,note:raw.note||''};
+    const raw=formVals();const d=Object.assign({},ex,{clientId:cid,month:m,note:raw.note||''});delete d.id;delete d.updatedAt;
     for(const p of Object.keys(PLAT)){d[p]={};for(const [k] of PLAT[p].fields){const v=raw[p+'.'+k];if(isNum(v))d[p][k]=v}}
     if(await save('metrics',cid+'_'+m,d)){closeModal();toast('保存しました')}
   });
@@ -509,7 +509,7 @@ function viewRep(){
   }
   const c=cById(S.repClient); if(!c){S.repClient='';return viewRep()}
   const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
-  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+'</div></div>';
+  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(d&&d.source==='apify'?' ・ <span class="chip good">自動取得 '+dlabel((d.collectedAt||'').slice(0,10))+'</span>':'')+'</div></div>';
   if(!d){h+='<div class="empty"><b>'+mlabel(m)+'の数値がまだ入っていません</b><span>各SNSのインサイト画面の数字を入力すると、前月との比較・1本あたりの成果・推移グラフが自動で作られます。</span><button class="primary" data-act="editMetrics" data-id="'+c.id+'">数値を入力</button></div></section>';return h}
   // headline summary
   const sumF=followersTotal(c.id,m),sumPF=followersTotal(c.id,pm);
@@ -539,7 +539,7 @@ function viewRep(){
       +'</div>'+trendSvg(c.id,p,m)+'</div>'+topVideosHtml(d,p)+'</div>';
   }
   if(d.note)h+='<div class="sec"><h3>所感・来月の施策</h3><div class="note">'+esc(d.note)+'</div></div>';
-  h+='<p class="hint" style="margin:0">エンゲージメント率＝（いいね＋コメント＋保存/シェア）÷ 再生数。1本あたり＝月の数値 ÷ 投稿本数。</p></section>';
+  h+='<p class="hint" style="margin:0">エンゲージメント率＝（いいね＋コメント＋保存/シェア）÷ 再生数。1本あたり＝月の数値 ÷ 投稿本数。'+(d.source==='apify'?'自動取得の再生数・いいね等は、その月に投稿した動画の取得日時点の合計です。':'')+'</p></section>';
   return h;
 }
 function reportText(){
