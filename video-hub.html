@@ -176,6 +176,9 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 <main id="main"><div class="empty"><b>読み込み中…</b></div></main>
 <div id="modal-root"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function(){
 const PLAT={
@@ -201,7 +204,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const isNum=v=>typeof v==='number'&&isFinite(v);
 const fmt=(n,dp)=>isNum(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:dp==null?0:dp,minimumFractionDigits:dp||0}):'—';
 
-const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],db:null,loaded:0,
+const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],db:null,loaded:0,
   f:{client:'',editor:'',status:'',scope:'month',hideDone:false},calClient:'',repClient:''};
 try{const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
 
@@ -305,9 +308,9 @@ function editClient(c){
     +field({k:'longQuota',label:'YouTube本数/月（空欄=プラン通り）',type:'number',v:c.longQuota})
     +field({k:'startMonth',label:'運用開始月',type:'month',v:c.startMonth})
     +field({k:'active',label:'状態',type:'select',options:[['1','運用中'],['0','停止・終了']],v:c.active===false?'0':'1'})
-    +field({k:'ig',label:'Instagram アカウント',v:c.ig,ph:'@'})
-    +field({k:'tt',label:'TikTok アカウント',v:c.tt,ph:'@'})
-    +field({k:'yt',label:'YouTube チャンネル',v:c.yt,full:true})
+    +field({k:'ig',label:'Instagram アカウントURL',v:c.ig,ph:'https://www.instagram.com/…',full:true})
+    +field({k:'tt',label:'TikTok アカウントURL',v:c.tt,ph:'https://www.tiktok.com/@…',full:true})
+    +field({k:'yt',label:'YouTube チャンネルURL',v:c.yt,ph:'https://www.youtube.com/@…',full:true})
     +field({k:'contact',label:'担当者・連絡先メモ',type:'textarea',v:c.contact,rows:2});
   openModal(c.id?'クライアントを編集':'クライアントを追加',html,async()=>{
     const d=formVals(); if(!d.name){toast('クライアント名を入力してください');return}
@@ -484,7 +487,7 @@ function trendSvg(cid,p,m){
 }
 function platMetrics(d,p,cid,m){
   if(!d||!d[p])return null;const x=Object.assign({},d[p]);
-  if(!isNum(x.posts)){const c=postedCount(cid,m,p);if(c)x.posts=c}
+  if(!isNum(x.posts)){const lv=(d.videos||[]).filter(v=>v.platform===p).length;const c=lv||postedCount(cid,m,p);if(c)x.posts=c}
   if(isNum(x.views)&&isNum(x.posts)&&x.posts>0){x.vpp=x.views/x.posts}
   if(isNum(x.likes)&&isNum(x.posts)&&x.posts>0){x.lpp=x.likes/x.posts}
   const eng=PLAT[p].eng.reduce((a,k)=>a+(isNum(x[k])?x[k]:0),0);
@@ -494,7 +497,7 @@ function platMetrics(d,p,cid,m){
 function viewRep(){
   const cl=activeClients(); if(!cl.length)return needClients();
   const m=S.month,pm=madd(m,-1);
-  let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の数値を入力</button><button data-act="copyRep">報告文をコピー</button>':'')+'</div></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の数値を入力</button><button data-act="copyRep">報告文をコピー</button>'+(S.dl?'<button data-act="pdfOne" data-id="'+S.repClient+'">PDFを保存</button>':''):(S.dl?'<button class="primary" data-act="pdfAll">全クライアントのPDFを一括保存</button>':''))+'</div></div>';
   if(!S.repClient){
     h+='<p class="hint" style="margin:0">'+mlabel(m)+'の数値と、前月（'+mlabel(pm)+'）との比較です。クライアント名を押すと詳しいレポートを開きます。</p><div class="scroll"><table><thead><tr><th>クライアント</th><th>入力</th>'
       +Object.entries(PLAT).map(([p,d])=>'<th class="r"><span class="pf '+p+'">'+p.toUpperCase()+'</span>'+(p==='yt'?'登録者':'フォロワー')+'</th><th class="r">'+'再生数'+'</th>').join('')+'</tr></thead><tbody>'
@@ -533,7 +536,7 @@ function viewRep(){
     kp.push({l:'エンゲージメント率',v:x.er,pv:y.er,dp:2,pct:1});
     h+='<div class="plat"><div class="plat-h"><span class="dot" style="background:var(--'+p+')"></span><h3>'+def.name+'</h3>'+(c[p]?'<span class="hint">'+esc(c[p])+'</span>':'')+'</div><div class="plat-body"><div class="kpis">'
       +kp.filter(k=>isNum(k.v)).map(k=>'<div class="kpi'+(k.key?' key-kpi':'')+'"><span class="lbl">'+esc(k.l)+'</span><span class="v">'+(k.signed&&k.v>0?'+':'')+fmt(k.v,k.dp)+(k.pct?'<small style="font-size:13px">%</small>':'')+'</span><span class="cmp">'+deltaHtml(k.v,k.pv,{dp:k.dp,pct:k.pct})+'</span><span class="prev">前月 '+(isNum(k.pv)?(k.signed&&k.pv>0?'+':'')+fmt(k.pv,k.dp)+(k.pct?'%':''):'—')+'</span></div>').join('')
-      +'</div>'+trendSvg(c.id,p,m)+'</div></div>';
+      +'</div>'+trendSvg(c.id,p,m)+'</div>'+topVideosHtml(d,p)+'</div>';
   }
   if(d.note)h+='<div class="sec"><h3>所感・来月の施策</h3><div class="note">'+esc(d.note)+'</div></div>';
   h+='<p class="hint" style="margin:0">エンゲージメント率＝（いいね＋コメント＋保存/シェア）÷ 再生数。1本あたり＝月の数値 ÷ 投稿本数。</p></section>';
@@ -552,13 +555,93 @@ function reportText(){
 
 function viewCli(){
   const all=S.clients.slice().sort((a,b)=>(b.active!==false)-(a.active!==false)||(a.name||'').localeCompare(b.name||'','ja'));
-  let h='<section class="sec"><div class="sec-h"><h2>クライアント</h2><button class="primary" data-act="addClient">＋ クライアントを追加</button></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>クライアント</h2><button class="primary" data-act="addClient">＋ クライアントを追加</button></div><div class="filters"><label class="hint" for="set-company">PDFレポートの発行元</label><input id="set-company" value="'+esc(company())+'" placeholder="例：株式会社〇〇"><button data-act="saveCompany">保存</button></div>';
   if(!all.length)return h+'<div class="panel empty"><b>まだ登録がありません</b><span>運用中の取引先を追加してください。</span></div></section>';
   h+='<div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th class="r">月の本数</th><th>運用開始</th><th>残り期間</th><th>アカウント</th><th>状態</th><th></th></tr></thead><tbody>'
     +all.map(c=>{const q=quota(c);let rest='—';if(c.startMonth){const end=madd(c.startMonth,6);const [ey,em]=end.split('-').map(Number),[ty,tm]=ymOf(TODAY).split('-').map(Number);const left=(ey-ty)*12+(em-tm);rest=left>0?'あと'+left+'ヶ月（'+mlabel(madd(end,-1))+'まで）':'<span class="chip warn">6ヶ月経過</span>'}
       return'<tr><td><b>'+esc(c.name)+'</b></td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
     +'</tbody></table></div></section>';
   return h;
+}
+
+/* ---------- top videos (per-video data in a metrics doc: videos:[{platform,title,url,date,views,likes,comments}]) ---------- */
+function topVideos(d,p,n){const vs=(d&&d.videos||[]).filter(v=>v.platform===p);return vs.slice().sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,n||5)}
+function topVideosHtml(d,p){const vs=topVideos(d,p,5);if(!vs.length)return'';
+  return'<div class="scroll"><table><thead><tr><th>再生数上位の動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+vs.map(v=>'<tr><td class="wrap">'+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="num">'+dlabel(v.date)+'</td><td class="r num">'+fmt(v.views)+'</td><td class="r num">'+fmt(v.likes)+'</td><td class="r num">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table></div>'}
+const company=()=>((S.settings.find(x=>x.id==='main')||{}).company||'');
+
+/* ---------- PDF report (fixed light print palette, A4 pages rendered to canvas) ---------- */
+const PDF_CSS='.pdfp{width:794px;height:1123px;background:#fff;color:#17283b;font-family:var(--font);line-height:1.6;position:relative;overflow:hidden;--ink:#17283b;--muted:#5a6a7c;--line:#d9e0e8;--surface:#fff;--sunk:#f1f4f8;--good:#1d8656;--bad:#c3372d;--ig:#c13584;--tt:#0e8f8f;--yt:#d92323;--accent:#22405f}'
+ +'.pdfp .band{background:#22405f;color:#fff;padding:34px 48px 26px}.pdfp .band .k{font-size:12px;letter-spacing:.2em;opacity:.8}.pdfp .band .n{font-size:30px;font-weight:700;margin-top:6px}.pdfp .band .m{font-family:var(--num);font-size:22px;margin-top:2px}'
+ +'.pdfp .phead{display:flex;align-items:center;gap:12px;padding:36px 48px 14px;border-bottom:3px solid var(--pc)}.pdfp .phead b{font-size:24px}.pdfp .phead span{color:#5a6a7c;font-size:13px}.pdfp .phead i{width:16px;height:16px;border-radius:4px;background:var(--pc)}'
+ +'.pdfp .body{padding:24px 48px;display:grid;gap:18px}.pdfp h4{margin:0;font-size:15px;border-left:4px solid #22405f;padding-left:8px}'
+ +'.pdfp .t4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.pdfp .t3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}'
+ +'.pdfp .box{border:1px solid #d9e0e8;border-radius:8px;padding:10px 12px;display:grid;gap:2px}.pdfp .box.hl{background:#f1f4f8}.pdfp .box .l{font-size:11px;color:#5a6a7c}.pdfp .box .v{font-family:var(--num);font-size:26px;font-weight:600;line-height:1.15}.pdfp .box .c{font-family:var(--num);font-size:13px}.pdfp .box .p{font-size:11px;color:#5a6a7c}'
+ +'.pdfp table{width:100%;border-collapse:collapse;font-size:12px}.pdfp th{background:#f1f4f8;color:#5a6a7c;font-weight:500;font-size:11px;text-align:left;padding:7px 8px}.pdfp td{padding:7px 8px;border-bottom:1px solid #d9e0e8}.pdfp td.r,.pdfp th.r{text-align:right;font-family:var(--num)}'
+ +'.pdfp .up{color:#1d8656}.pdfp .down{color:#c3372d}.pdfp .flat{color:#5a6a7c}.pdfp .note{white-space:pre-wrap;background:#f1f4f8;border-radius:8px;padding:14px;font-size:13px;line-height:1.8}'
+ +'.pdfp .chart svg{width:100%;height:auto;display:block}.pdfp .chart text{font-family:var(--num);font-size:10px}.pdfp .legend{display:flex;gap:14px;font-size:11px;color:#5a6a7c}.pdfp .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}'
+ +'.pdfp .foot{position:absolute;left:48px;right:48px;bottom:24px;display:flex;justify-content:space-between;font-size:10px;color:#5a6a7c;border-top:1px solid #d9e0e8;padding-top:8px}';
+function pdfPages(cid,m){
+  const c=cById(cid),d=metricsFor(cid,m),pm=madd(m,-1),pd=metricsFor(cid,pm);if(!c||!d)return null;
+  const pages=[];const issued=dlabel(TODAY);
+  const sumF=followersTotal(cid,m),sumPF=followersTotal(cid,pm);
+  const tot=(doc,mm,k)=>doc?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(doc,p,cid,mm);return a+(x&&isNum(x[k])?x[k]:0)},0):null;
+  const V=tot(d,m,'views'),PV=tot(pd,pm,'views'),P=tot(d,m,'posts'),PP=tot(pd,pm,'posts');
+  const box=(l,v,pv,o)=>{o=o||{};return'<div class="box'+(o.hl?' hl':'')+'"><span class="l">'+esc(l)+'</span><span class="v">'+(o.signed&&v>0?'+':'')+fmt(v,o.dp)+(o.pct&&isNum(v)?'%':'')+'</span><span class="c">'+deltaHtml(v,pv,{dp:o.dp,pct:o.pct})+'</span><span class="p">前月 '+(isNum(pv)?(o.signed&&pv>0?'+':'')+fmt(pv,o.dp)+(o.pct?'%':''):'—')+'</span></div>'};
+  const plats=Object.keys(PLAT).filter(p=>d[p]&&Object.keys(d[p]).length);
+  pages.push('<div class="band"><div class="k">SNS運用 月次レポート</div><div class="n">'+esc(c.name)+' 様</div><div class="m">'+mlabel(m)+'</div></div><div class="body">'
+    +'<h4>今月のサマリー</h4><div class="t4">'+box('フォロワー合計',sumF,sumPF,{hl:1})+box('総再生数',V,PV)+box('投稿本数',P,PP)+box('1本あたり再生',P?V/P:null,PP?PV/PP:null)+'</div>'
+    +'<h4>媒体別の結果（前月比）</h4><table><thead><tr><th>媒体</th><th class="r">フォロワー</th><th class="r">増減</th><th class="r">再生数</th><th class="r">増減</th><th class="r">投稿</th><th class="r">1本あたり再生</th></tr></thead><tbody>'
+    +plats.map(p=>{const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};return'<tr><td><b style="color:var(--'+p+')">■</b> '+PLAT[p].name+'</td><td class="r">'+fmt(x.followers)+'</td><td class="r">'+deltaHtml(x.followers,y.followers)+'</td><td class="r">'+fmt(x.views)+'</td><td class="r">'+deltaHtml(x.views,y.views)+'</td><td class="r">'+fmt(x.posts)+'</td><td class="r">'+fmt(x.vpp)+'</td></tr>'}).join('')+'</tbody></table>'
+    +(d.note?'<h4>所感・来月の施策</h4><div class="note">'+esc(d.note)+'</div>':'')+'</div>');
+  for(const p of plats){
+    const def=PLAT[p],x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};
+    const pp=metricsFor(cid,madd(pm,-1));const gain=isNum(x.followers)&&isNum(y.followers)?x.followers-y.followers:null;
+    const gainPrev=(isNum(y.followers)&&pp&&pp[p]&&isNum(pp[p].followers))?y.followers-pp[p].followers:null;
+    const ks=[box(def.fields[0][1],x.followers,y.followers,{hl:1}),isNum(gain)?box('今月の増加数',gain,gainPrev,{hl:1,signed:1}):'']
+      .concat(def.fields.slice(1).filter(([k])=>isNum(x[k])).map(([k,l])=>box(l,x[k],y[k],{dp:k==='watchHours'?1:0})))
+      .concat([isNum(x.vpp)?box('1本あたり再生',x.vpp,y.vpp,{hl:1}):'',isNum(x.er)?box('エンゲージメント率',x.er,y.er,{dp:2,pct:1}):'']);
+    const tv=topVideos(d,p,8);
+    pages.push('<div class="phead" style="--pc:var(--'+p+')"><i></i><b>'+def.name+'</b><span>'+esc(c.name)+' 様 ／ '+mlabel(m)+'</span></div><div class="body">'
+      +'<div class="t3">'+ks.join('')+'</div><h4>6ヶ月の推移</h4>'+trendSvg(cid,p,m)
+      +(tv.length?'<h4>再生数の多かった動画</h4><table><thead><tr><th>動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+tv.map(v=>'<tr><td>'+esc((v.title||'(無題)').slice(0,40))+'</td><td>'+dlabel(v.date)+'</td><td class="r">'+fmt(v.views)+'</td><td class="r">'+fmt(v.likes)+'</td><td class="r">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table>':'')
+      +'</div>');
+  }
+  return pages.map((h,i)=>h+'<div class="foot"><span>'+esc(company()||'SNS運用 月次レポート')+'</span><span>発行日 '+issued+' ・ '+(i+1)+' / '+pages.length+'</span></div>');
+}
+async function pdfBlob(cid,m){
+  const pages=pdfPages(cid,m);if(!pages)return null;
+  if(!window.jspdf||!window.html2canvas)throw new Error('lib');
+  const host=document.createElement('div');host.style.cssText='position:fixed;left:-10000px;top:0';host.innerHTML='<style>'+PDF_CSS+'</style>';document.body.appendChild(host);
+  const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});
+  try{
+    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+    for(let i=0;i<pages.length;i++){
+      const el=document.createElement('div');el.className='pdfp';el.innerHTML=pages[i];host.appendChild(el);
+      const cv=await window.html2canvas(el,{scale:2,backgroundColor:'#ffffff',logging:false});
+      if(i)doc.addPage();doc.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',0,0,210,297);el.remove();
+    }
+  }finally{host.remove()}
+  return doc.output('blob');
+}
+const pdfName=(cid,m)=>'SNSレポート_'+cName(cid).replace(/[\\/:*?"<>|]/g,'')+'_'+m.replace('-','年')+'月.pdf';
+async function saveFile(filename,data){try{await S.dl.save({filename,data});toast('保存しました')}catch(e){if(!(e&&e.code==='declined'))toast('保存できませんでした（'+(e&&e.code||'error')+'）')}}
+async function pdfOne(cid){
+  if(!metricsFor(cid,S.month)){toast(mlabel(S.month)+'の数値が未入力です');return}
+  toast('PDFを作成中…');let b;
+  try{b=await pdfBlob(cid,S.month)}catch(e){toast('PDFを作成できませんでした。ページを開き直してください');return}
+  await saveFile(pdfName(cid,S.month),b);
+}
+async function pdfAll(){
+  const m=S.month;const ids=activeClients().filter(c=>metricsFor(c.id,m)).map(c=>c.id);
+  if(!ids.length){toast(mlabel(m)+'の数値が入っているクライアントがありません');return}
+  if(!window.JSZip){toast('ZIPを作れませんでした。ページを開き直してください');return}
+  const zip=new window.JSZip();
+  try{for(let i=0;i<ids.length;i++){toast('PDFを作成中… '+(i+1)+' / '+ids.length);zip.file(pdfName(ids[i],m),await pdfBlob(ids[i],m))}}
+  catch(e){toast('PDFを作成できませんでした。ページを開き直してください');return}
+  const skipped=activeClients().length-ids.length;
+  await saveFile('SNSレポート_'+m.replace('-','年')+'月_'+ids.length+'社.zip',await zip.generateAsync({type:'blob'}));
+  if(skipped)setTimeout(()=>toast('数値未入力の'+skipped+'社は含まれていません'),2700);
 }
 
 /* ---------- render ---------- */
@@ -568,7 +651,7 @@ function render(){
   document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===S.tab)));
   const main=document.getElementById('main');
   if(S.dbState==='none'){main.innerHTML='<div class="notice">この画面ではデータの保存・共有が使えません。claude.ai にサインインした状態で開くと、チーム全員で同じデータを見られます。</div>';return}
-  if(S.loaded<4){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
+  if(S.loaded<5){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
   main.innerHTML=(VIEWS[S.tab]||viewDash)();
 }
 
@@ -595,6 +678,9 @@ document.addEventListener('click',async e=>{
     case'editMetrics':editMetrics(id,S.month);break;
     case'openRep':S.repClient=id;S.tab='rep';try{localStorage.setItem('vh.rep',id);localStorage.setItem('vh.tab','rep')}catch(_){}render();window.scrollTo(0,0);break;
     case'edFilter':S.f.editor=t.dataset.name;S.f.scope='month';S.tab='prod';render();break;
+    case'pdfOne':pdfOne(id);break;
+    case'pdfAll':pdfAll();break;
+    case'saveCompany':{const v=document.getElementById('set-company').value.trim();if(await save('settings','main',{company:v}))toast('保存しました');break}
     case'copyRep':{const txt=reportText();if(!txt){toast('先に数値を入力してください');break}
       try{await navigator.clipboard.writeText(txt);toast('LINE・メールに貼れる報告文をコピーしました')}
       catch(_){openModal('報告文',field({k:'txt',label:'全選択してコピーしてください',type:'textarea',v:txt,rows:14}),async()=>closeModal());const ta=document.getElementById('f_txt');ta.focus();ta.select()}
@@ -617,7 +703,8 @@ render();
   if(!db){S.dbState='none';render();return}
   S.db=db;
   const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
-  sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');
+  sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');
+  window.claude.use('downloads').then(d=>{S.dl=d;if(!document.querySelector('.ov'))render()});
 })();
 })();
 </script>
