@@ -283,20 +283,50 @@ def collect(clients, month, token, log=print):
     return docs, errors
 
 
+def this_month(today=None):
+    """Current month as YYYY-MM in JST."""
+    t = today or dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).date()
+    return t.strftime("%Y-%m")
+
+
+def collect_months(clients, months, token, log=print):
+    """Run the actors once and build docs for every month in `months`."""
+    global run_actor
+    real, cache = run_actor, {}
+
+    def cached(actor, inp, tok, **kw):
+        if actor not in cache:
+            cache[actor] = real(actor, inp, tok, **kw)
+        return cache[actor]
+
+    run_actor = cached
+    try:
+        docs, errors = [], []
+        for m in months:
+            d, e = collect(clients, m, token, log=log)
+            docs += d
+            errors += [x for x in e if x not in errors]
+        return docs, errors
+    finally:
+        run_actor = real
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("clients", help="clients JSON exported from the hub")
-    ap.add_argument("--month", default=prev_month(), help="target month YYYY-MM (default: last month)")
+    ap.add_argument("--month", default=prev_month(),
+                    help="target month(s) YYYY-MM, comma separated; 'now' = this month and last month (default: last month)")
     ap.add_argument("--out", default="metrics.json")
     a = ap.parse_args()
+    months = [prev_month(), this_month()] if a.month == "now" else [m.strip() for m in a.month.split(",") if m.strip()]
     # The token may come from APIFY_TOKEN, or be injected by the environment's
     # "API認証情報" (credential proxy) for api.apify.com, in which case it is empty here.
     token = os.environ.get("APIFY_TOKEN", "")
     with open(a.clients, encoding="utf-8") as f:
         clients = json.load(f)
-    docs, errors = collect(clients, a.month, token, log=lambda s: print(s, file=sys.stderr))
+    docs, errors = collect_months(clients, months, token, log=lambda s: print(s, file=sys.stderr))
     with open(a.out, "w", encoding="utf-8") as f:
-        json.dump({"month": a.month, "docs": docs, "errors": errors}, f, ensure_ascii=False, indent=1)
+        json.dump({"months": months, "docs": docs, "errors": errors}, f, ensure_ascii=False, indent=1)
     print("wrote %d docs to %s (%d errors)" % (len(docs), a.out, len(errors)), file=sys.stderr)
 
 

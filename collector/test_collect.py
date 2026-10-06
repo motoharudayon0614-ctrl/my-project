@@ -57,6 +57,17 @@ class T(unittest.TestCase):
         self.assertEqual(block["views"], 20141)
         self.assertEqual(block["posts"], 1)
 
+    def test_collect_months_runs_actors_once(self):
+        calls = []
+        fx = {"apify~instagram-profile-scraper": IG, "apify~instagram-reel-scraper": [], "clockworks~tiktok-scraper": TT, "streamers~youtube-scraper": YT}
+        def fake(a, i, t, **kw):
+            calls.append(a)
+            return fx[a]
+        with mock.patch.object(collect, "run_actor", side_effect=fake):
+            docs, errors = collect.collect_months([{"id": "c1", "ig": "@shop_a", "tt": "@shop_a", "yt": "@shop_a"}], ["2026-09", "2026-10"], "", log=lambda s: None)
+        self.assertEqual(sorted(d["docId"] for d in docs), ["c1_2026-09", "c1_2026-10"])
+        self.assertEqual(len(calls), 4)
+
     def test_failed_platform_is_reported(self):
         def boom(a, i, t):
             if a.startswith("apify~"):
