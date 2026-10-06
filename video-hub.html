@@ -157,6 +157,7 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 @media (max-width:520px){.form{grid-template-columns:1fr}}
 .mf{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .mf .r{display:flex;gap:8px;margin-left:auto}
+.toast-undo{margin-left:12px;background:transparent;color:inherit;border:1px solid currentColor;padding:2px 10px;font-size:12px;border-radius:6px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;z-index:60;font-size:13px}
 .notice{padding:10px 14px;border-radius:8px;border:1px solid var(--warn);color:var(--ink);background:var(--surface);font-size:13px}
 .cl-row td:first-child{font-weight:700}
@@ -220,7 +221,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const isNum=v=>typeof v==='number'&&isFinite(v);
 const fmt=(n,dp)=>isNum(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:dp==null?0:dp,minimumFractionDigits:dp||0}):'—';
 
-const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],gcal:[],db:null,loaded:0,
+const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],gcal:[],trash:[],db:null,loaded:0,
   f:{client:'',editor:'',status:'',scope:'month',hideDone:false},calClient:'',repClient:''};
 try{S.payBasis=localStorage.getItem('vh.pay')||'stored';S.calClients=JSON.parse(localStorage.getItem('vh.cal')||'[]');const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
 
@@ -248,7 +249,9 @@ function deltaHtml(cur,prev,opts){
 
 /* ---------- toast & modal ---------- */
 let toastT;
-function toast(msg){let el=document.querySelector('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}el.textContent=msg;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{el.hidden=true},2600)}
+function toast(msg,undoId){let el=document.querySelector('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}
+  el.textContent=msg;if(undoId){const b=document.createElement('button');b.className='toast-undo';b.dataset.act='restore';b.dataset.id=undoId;b.textContent='元に戻す';el.appendChild(b)}
+  el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{el.hidden=true},undoId?8000:2600)}
 let modalSave=null,modalDel=null;
 function openModal(title,fieldsHtml,onSave,onDel){
   modalSave=onSave;modalDel=onDel||null;
@@ -281,7 +284,29 @@ async function save(col,id,data){
   catch(e){toast(e&&e.code==='invalid_argument'?'保存する権限がありません（閲覧のみの共有です）':'保存できませんでした。もう一度お試しください');return false}
 }
 async function upd(col,id,data){try{await S.db.collection(col).doc(id).update(data);return true}catch(e){toast('更新できませんでした');return false}}
-async function del(col,id){try{await S.db.collection(col).doc(id).delete();return true}catch(e){toast('削除できませんでした');return false}}
+const TRASH_DAYS=30;
+function trashLabel(col,d){return col==='videos'?'動画：'+(d.title||'')+'（'+cName(d.clientId)+'）':col==='shoots'?'撮影：'+cName(d.clientId)+' '+dlabel(d.date):col==='clients'?'クライアント：'+(d.name||''):col}
+async function del(col,id){
+  const cur=(S[col]||[]).find(x=>x.id===id);let tid=null;
+  try{
+    if(cur){const data=Object.assign({},cur);delete data.id;const ref=S.db.collection('trash').doc();tid=ref.id;
+      await ref.set({col,docId:id,data,label:trashLabel(col,cur),deletedAt:new Date().toISOString()})}
+    await S.db.collection(col).doc(id).delete();S.lastTrash=tid;return true
+  }catch(e){toast('削除できませんでした');return false}
+}
+async function restore(tid){
+  const t=S.trash.find(x=>x.id===tid);if(!t){toast('この項目はもう戻せません');return}
+  try{await S.db.collection(t.col).doc(t.docId).set(t.data);await S.db.collection('trash').doc(tid).delete();toast('元に戻しました：'+t.label);if(t.col==='shoots')setTimeout(()=>syncGcal(false),800)}
+  catch(e){toast('元に戻せませんでした（編集権限が必要です）')}
+}
+async function pruneTrash(){const lim=Date.now()-TRASH_DAYS*864e5;for(const t of S.trash)if(new Date(t.deletedAt||0).getTime()<lim){try{await S.db.collection('trash').doc(t.id).delete()}catch(_){return}}}
+function trashHtml(){
+  const items=S.trash.slice().sort((a,b)=>(b.deletedAt||'').localeCompare(a.deletedAt||''));
+  return'<section class="sec"><div class="sec-h"><h2>削除した項目</h2><span class="hint">削除から'+TRASH_DAYS+'日間は元に戻せます</span></div>'
+    +(items.length?'<div class="scroll"><table><thead><tr><th>削除したもの</th><th>削除日時</th><th></th></tr></thead><tbody>'
+      +items.map(t=>'<tr><td class="wrap">'+esc(t.label||t.col)+'</td><td class="num">'+(t.deletedAt?dlabel(t.deletedAt.slice(0,10))+' '+new Date(t.deletedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'—')+'</td><td><button data-act="restore" data-id="'+t.id+'">元に戻す</button></td></tr>').join('')
+      +'</tbody></table></div>':'<div class="panel empty"><span>削除した動画・撮影予定・クライアントはここに表示され、元に戻せます。</span></div>')+'</section>';
+}
 
 /* ---------- forms ---------- */
 function clientOptions(blankLabel){const o=activeClients().map(c=>[c.id,c.name]);return blankLabel?[['',blankLabel]].concat(o):o}
@@ -303,7 +328,7 @@ function editVideo(v){
     let d=formVals(); if(!d.title){toast('タイトルを入力してください');return}
     if(v.source==='sheet')d=Object.assign({},v,d,{title:v.title,clientId:v.clientId,status:v.status,editor:v.editor,dueDate:v.dueDate,postDate:v.postDate,memo:v.memo,url:v.url}),delete d.id;
     if(await save('videos',v.id,d)){closeModal();toast(v.id?'更新しました':'追加しました')}
-  },v.id?async()=>{if(await del('videos',v.id)){closeModal();toast('削除しました')}}:null);
+  },v.id?async()=>{if(await del('videos',v.id)){closeModal();toast('削除しました',S.lastTrash)}}:null);
 }
 function editShoot(s){
   s=s||{clientId:(S.calClients||[])[0]||(activeClients()[0]||{}).id,people:1,date:S.month===ymOf(TODAY)?TODAY:S.month+'-01'};
@@ -317,7 +342,7 @@ function editShoot(s){
   openModal(s.id?'撮影予定を編集':'撮影予定を追加',html,async()=>{
     const d=formVals(); if(!d.date){toast('撮影日を入力してください');return}
     if(await save('shoots',s.id,d)){closeModal();toast('保存しました');setTimeout(()=>syncGcal(false),800)}
-  },s.id?async()=>{if(await del('shoots',s.id)){closeModal();toast('削除しました');setTimeout(()=>syncGcal(false),800)}}:null);
+  },s.id?async()=>{if(await del('shoots',s.id)){closeModal();toast('削除しました',S.lastTrash);setTimeout(()=>syncGcal(false),800)}}:null);
 }
 function editClient(c){
   c=c||{plan:'basic',active:true,startMonth:S.month};
@@ -339,7 +364,7 @@ function editClient(c){
     if(c.name&&normName(c.name)!==normName(d.name))d.aliases=[...new Set((c.aliases||[]).concat([c.name]))];
     const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''));
     if(await save('clients',id,d)){closeModal();toast('保存しました');if(urlChanged&&hasUrls(d)&&d.active!==false)requestFetch([id])}
-  },c.id?async()=>{if(await del('clients',c.id)){closeModal();toast('削除しました')}}:null);
+  },c.id?async()=>{if(await del('clients',c.id)){closeModal();toast('削除しました',S.lastTrash)}}:null);
 }
 function editMetrics(cid,m){
   const ex=metricsFor(cid,m)||{};
@@ -673,7 +698,7 @@ function viewCli(){
   h+='<div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th class="r">月の本数</th><th>運用開始</th><th>残り期間</th><th>アカウント</th><th>状態</th><th></th></tr></thead><tbody>'
     +all.map(c=>{const q=quota(c);let rest='—';if(c.startMonth){const end=madd(c.startMonth,6);const [ey,em]=end.split('-').map(Number),[ty,tm]=ymOf(TODAY).split('-').map(Number);const left=(ey-ty)*12+(em-tm);rest=left>0?'あと'+left+'ヶ月（'+mlabel(madd(end,-1))+'まで）':'<span class="chip warn">6ヶ月経過</span>'}
       return'<tr><td><b>'+esc(c.name)+'</b></td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+(fetchChip(c)?'<div>'+fetchChip(c)+'</div>':'')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
-    +'</tbody></table></div></section>';
+    +'</tbody></table></div></section>'+trashHtml();
   return h;
 }
 
@@ -1008,7 +1033,7 @@ function render(){
   document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===S.tab)));
   const main=document.getElementById('main');
   if(S.dbState==='none'){main.innerHTML='<div class="notice">この画面ではデータの保存・共有が使えません。claude.ai にサインインした状態で開くと、チーム全員で同じデータを見られます。</div>';return}
-  if(S.loaded<6){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
+  if(S.loaded<7){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
   main.innerHTML=(VIEWS[S.tab]||viewDash)();
 }
 
@@ -1040,6 +1065,7 @@ document.addEventListener('click',async e=>{
     case'editQuota':editQuota(id,S.month);break;
     case'calPickAll':S.calClients=[];S.calPickOpen=true;try{localStorage.setItem('vh.cal','[]')}catch(_){}render();break;
     case'calPickToggle':S.calPickOpen=!S.calPickOpen;render();break;
+    case'restore':restore(id);{const el=document.querySelector('.toast');if(el)el.hidden=true}break;
     case'gcalSync':syncGcal(true);break;
     case'fetchOne':requestFetch([id]);break;
     case'fetchAll':requestFetch('all');break;
@@ -1073,9 +1099,9 @@ render();
   const db=window.claude&&window.claude.use?await window.claude.use('db'):null;
   if(!db){S.dbState='none';render();return}
   S.db=db;
-  const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++;if(S.loaded===6)autoSync()}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
-  sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');sub('gcal','gcal');
-  async function autoSync(){const at=mainSettings().sheetSyncedAt;if(!at||Date.now()-new Date(at).getTime()>10*60*1000)await syncSheet(false);syncGcal(false)}
+  const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++;if(S.loaded===7)autoSync()}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
+  sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');sub('gcal','gcal');sub('trash','trash');
+  async function autoSync(){const at=mainSettings().sheetSyncedAt;if(!at||Date.now()-new Date(at).getTime()>10*60*1000)await syncSheet(false);syncGcal(false);pruneTrash()}
   window.claude.use('user').then(u=>{S.isOwner=!!(u&&u.isOwner&&u.isOwner());render()});
   window.claude.use('downloads').then(d=>{S.dl=d;if(!document.querySelector('.ov'))render()});
 })();
