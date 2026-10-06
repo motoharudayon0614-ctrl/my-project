@@ -27,7 +27,8 @@ import urllib.request
 
 API = "https://api.apify.com/v2"
 ACTORS = {
-    "ig": "apify~instagram-profile-scraper",
+    "ig": "apify~instagram-profile-scraper",   # followers
+    "igr": "apify~instagram-reel-scraper",     # per-reel play counts (the number shown on the Reel)
     "tt": "clockworks~tiktok-scraper",
     "yt": "streamers~youtube-scraper",
 }
@@ -99,12 +100,15 @@ def prev_month(today=None):
 
 # ---------- normalisers (one Apify item -> our shapes) ----------
 
-def norm_ig(items, user):
+def norm_ig(items, user, reels=None):
+    """Followers from the profile scraper; videos from the reel scraper when it ran
+    (its videoPlayCount matches the count Instagram shows), else from latestPosts."""
     prof = next((i for i in items if (i.get("username") or "").lower() == user.lower()), items[0] if items else None)
-    if not prof:
+    if not prof and not reels:
         return None, []
+    own = [r for r in (reels or []) if (r.get("ownerUsername") or user).lower() == user.lower()]
     vids = []
-    for p in prof.get("latestPosts") or []:
+    for p in own or (prof or {}).get("latestPosts") or []:
         is_video = (p.get("type") or p.get("mediaType") or "").lower() in ("video", "reel", "clips") or p.get("videoViewCount") is not None or p.get("videoPlayCount") is not None
         if not is_video:
             continue
@@ -117,7 +121,7 @@ def norm_ig(items, user):
             "likes": num(p.get("likesCount")),
             "comments": num(p.get("commentsCount")),
         })
-    return {"followers": num(prof.get("followersCount"))}, vids
+    return {"followers": num((prof or {}).get("followersCount"))}, vids
 
 
 def norm_tt(items, user):
@@ -218,7 +222,7 @@ def collect(clients, month, token, log=print):
     ig = {c["id"]: ig_user(c.get("ig")) for c in clients}
     tt = {c["id"]: tt_user(c.get("tt")) for c in clients}
     yt = {c["id"]: yt_url(c.get("yt")) for c in clients}
-    raw = {"ig": [], "tt": [], "yt": []}
+    raw = {"ig": [], "igr": [], "tt": [], "yt": []}
     errors = []
 
     def attempt(p, fn):
@@ -232,6 +236,7 @@ def collect(clients, month, token, log=print):
     users = sorted({u for u in ig.values() if u})
     if users:
         attempt("ig", lambda: run_actor(ACTORS["ig"], {"usernames": users}, token))
+        attempt("igr", lambda: run_actor(ACTORS["igr"], {"username": users, "resultsLimit": 40}, token))
     users = sorted({u for u in tt.values() if u})
     if users:
         attempt("tt", lambda: run_actor(ACTORS["tt"], {"profiles": users, "resultsPerPage": 40,
@@ -251,8 +256,8 @@ def collect(clients, month, token, log=print):
     for c in clients:
         doc = {"clientId": c["id"], "month": month, "videos": [], "source": "apify",
                "collectedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
-        if ig[c["id"]] and raw["ig"]:
-            prof, vids = norm_ig(raw["ig"], ig[c["id"]])
+        if ig[c["id"]] and (raw["ig"] or raw["igr"]):
+            prof, vids = norm_ig(raw["ig"], ig[c["id"]], raw["igr"])
             doc["ig"], inm = monthly(prof, vids, month)
             doc["videos"] += inm
         if tt[c["id"]] and raw["tt"]:

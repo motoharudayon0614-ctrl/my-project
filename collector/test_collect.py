@@ -24,7 +24,7 @@ class T(unittest.TestCase):
         self.assertEqual(collect.yt_url("@shop_a"), "https://www.youtube.com/@shop_a")
 
     def test_collect(self):
-        fx = {"apify~instagram-profile-scraper": IG, "clockworks~tiktok-scraper": TT, "streamers~youtube-scraper": YT}
+        fx = {"apify~instagram-profile-scraper": IG, "apify~instagram-reel-scraper": [], "clockworks~tiktok-scraper": TT, "streamers~youtube-scraper": YT}
         with mock.patch.object(collect, "run_actor", side_effect=lambda a, i, t: fx[a]):
             docs, errors = collect.collect([{"id": "c1", "name": "A", "ig": "https://www.instagram.com/shop_a/",
                                              "tt": "https://www.tiktok.com/@shop_a", "yt": "https://www.youtube.com/@shop_a"},
@@ -47,6 +47,16 @@ class T(unittest.TestCase):
         self.assertTrue(collect.is_short({"url": "https://www.youtube.com/watch?v=a", "duration": "0:58"}))
         self.assertFalse(collect.is_short({"url": "https://www.youtube.com/watch?v=a", "duration": "12:04"}))
 
+    def test_reel_play_counts_win(self):
+        reels = [{"ownerUsername": "shop_a", "type": "Video", "videoPlayCount": 20141, "videoViewCount": 12193, "likesCount": 130,
+                  "commentsCount": 1, "timestamp": "2026-09-15T01:00:00.000Z", "url": "https://www.instagram.com/p/x/", "isPinned": False},
+                 {"ownerUsername": "shop_a", "type": "Video", "videoPlayCount": 907427, "timestamp": "2025-02-19T01:00:00.000Z", "isPinned": True}]
+        prof, vids = collect.norm_ig(IG, "shop_a", reels)
+        self.assertEqual(prof["followers"], 1320)
+        block, inm = collect.monthly(prof, vids, "2026-09")
+        self.assertEqual(block["views"], 20141)
+        self.assertEqual(block["posts"], 1)
+
     def test_failed_platform_is_reported(self):
         def boom(a, i, t):
             if a.startswith("apify~"):
@@ -55,7 +65,7 @@ class T(unittest.TestCase):
         with mock.patch.object(collect, "run_actor", side_effect=boom):
             docs, errors = collect.collect([{"id": "c1", "ig": "@shop_a"}], "2026-09", "tok", log=lambda s: None)
         self.assertEqual(docs, [])
-        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(errors), 2)
 
 
 if __name__ == "__main__":
