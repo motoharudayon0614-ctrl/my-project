@@ -314,7 +314,7 @@ function editShoot(s){
 }
 function editClient(c){
   c=c||{plan:'basic',active:true,startMonth:S.month};
-  const html=field({k:'name',label:'クライアント名',v:c.name,full:true})
+  const html=field({k:'name',label:'クライアント名（レポート・PDFに表示される名前）',v:c.name,full:true})+((c.aliases||[]).length||c.source==='sheet'?'<div class="full hint">名前を変えても、制作管理シートの「'+esc((c.aliases||[])[0]||c.name)+'」の行はこのクライアントとして取り込まれます。</div>':'')
     +field({k:'plan',label:'プラン',type:'select',options:[['basic','BASIC（月25万／ショート4・YouTube1）'],['pro','PRO（月35万／ショート4・YouTube4）'],['custom','カスタム']],v:c.plan,full:true})
     +field({k:'shortQuota',label:'ショート本数/月（空欄=プラン通り）',type:'number',v:c.shortQuota})
     +field({k:'longQuota',label:'YouTube本数/月（空欄=プラン通り）',type:'number',v:c.longQuota})
@@ -328,7 +328,8 @@ function editClient(c){
     const d=formVals(); if(!d.name){toast('クライアント名を入力してください');return}
     d.active=d.active!=='0';
     const id=c.id||S.db.collection('clients').doc().id;
-    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source'])if(c[k]!==undefined)d[k]=c[k];
+    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source','quotaHistory','quotaMonths','aliases'])if(c[k]!==undefined)d[k]=c[k];
+    if(c.name&&normName(c.name)!==normName(d.name))d.aliases=[...new Set((c.aliases||[]).concat([c.name]))];
     const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''));
     if(await save('clients',id,d)){closeModal();toast('保存しました');if(urlChanged&&hasUrls(d)&&d.active!==false)requestFetch([id])}
   },c.id?async()=>{if(await del('clients',c.id)){closeModal();toast('削除しました')}}:null);
@@ -602,7 +603,7 @@ function viewRep(){
   }
   const c=cById(S.repClient); if(!c){S.repClient='';return viewRep()}
   const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
-  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
+  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+' <button class="ghost" style="font-size:12px;vertical-align:middle" data-act="editClient" data-id="'+c.id+'">名前・設定を変更</button></div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
   if(!d){const urls=['ig','tt','yt'].filter(p=>c[p]);
     h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(isRunning(c)?'いま数字を取得しています。5〜10分ほどで自動で表示されます。':urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）の数字は「数字を更新」ですぐに取得できます。毎月1日の朝にも自動で取得します。':'クライアントタブでアカウントURLを登録すると、数字が自動で取得されます。')+'</span>'+(fetchChip(c)&&!isRunning(c)?fetchChip(c):'')+(urls.length?(isRunning(c)?'':'<button class="primary" data-act="fetchOne" data-id="'+c.id+'">数字を更新</button>'):'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
   if(d.source!=='apify'&&['ig','tt','yt'].some(p=>c[p]))h+='<div class="notice">登録されたアカウントURLからの数字はまだ取得していません。自動取得は毎月1日の朝（前月分）です。右上の「数字を更新」を押すと、5〜10分ほどで取得します。</div>';
@@ -715,7 +716,7 @@ async function syncSheet(manual){
     if(C.store<0)C.store=hdr.findIndex(h=>h.startsWith('格納URL'));
     const g=(r,k)=>C[k]>=0?String(r[C[k]]||'').trim():'';
     // clients: match by normalised name, create the missing ones
-    const byName={};S.clients.forEach(c=>{byName[normName(c.name)]=c.id});
+    const byName={};S.clients.forEach(c=>{[c.name].concat(c.aliases||[]).forEach(n=>{if(n)byName[normName(n)]=c.id})});
     const newClients={};
     const seen={};const want={};
     rows.slice(1).forEach((r,i)=>{
