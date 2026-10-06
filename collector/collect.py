@@ -144,6 +144,18 @@ def norm_tt(items, user):
     return {"followers": followers}, vids
 
 
+def is_short(it):
+    """YouTube Shorts: /shorts/ URL, a 'shorts' type, or a duration of 3 minutes or less."""
+    if "/shorts/" in (it.get("url") or "") or str(it.get("type") or "").lower().startswith("short"):
+        return True
+    d = it.get("duration")
+    if isinstance(d, str) and re.fullmatch(r"\d{1,2}(:\d{2}){1,2}", d):
+        parts = [int(x) for x in d.split(":")]
+        secs = parts[-1] + 60 * parts[-2] + (3600 * parts[0] if len(parts) == 3 else 0)
+        return secs <= 180
+    return False
+
+
 def norm_yt(items):
     followers = None
     vids = []
@@ -153,6 +165,7 @@ def norm_yt(items):
             continue
         vids.append({
             "platform": "yt",
+            "kind": "short" if is_short(it) else "long",
             "title": (it.get("title") or "").strip()[:80],
             "url": it.get("url"),
             "date": to_date(it.get("date") or it.get("uploadDate")),

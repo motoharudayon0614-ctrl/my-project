@@ -320,16 +320,16 @@ function editClient(c){
 }
 function editMetrics(cid,m){
   const ex=metricsFor(cid,m)||{};
-  let html='<div class="full hint">'+esc(cName(cid))+' ／ '+mlabel(m)+'の数字を入力します。アカウントURLを登録したクライアントは毎月1日に公開データから自動で入ります。ここでは足りない数字の追加や修正、所感の記入ができます。投稿本数が空欄なら、制作管理の投稿予定日から自動で数えます。</div>';
-  for(const [p,def] of Object.entries(PLAT)){
-    html+='<fieldset><legend><span class="pf '+p+'">'+p.toUpperCase()+'</span> '+def.name+'</legend>'+def.fields.map(([k,l])=>{
-      const v=ex[p]&&isNum(ex[p][k])?ex[p][k]:'';const ph=k==='posts'?'自動: '+postedCount(cid,m,p):'';
-      return'<label>'+esc(l)+'<input name="'+p+'.'+k+'" type="number" inputmode="decimal" step="any" value="'+v+'" placeholder="'+ph+'"></label>'}).join('')+'</fieldset>';
-  }
-  html+=field({k:'note',label:'所感・来月の施策（お客様向けコメント）',type:'textarea',v:ex.note,rows:4});
-  openModal('数値入力',html,async()=>{
-    const raw=formVals();const d=Object.assign({},ex,{clientId:cid,month:m,note:raw.note||''});delete d.id;delete d.updatedAt;
-    for(const p of Object.keys(PLAT)){d[p]={};for(const [k] of PLAT[p].fields){const v=raw[p+'.'+k];if(isNum(v))d[p][k]=v}}
+  const val=(p,k)=>ex[p]&&isNum(ex[p][k])?ex[p][k]:'';
+  const inp=(p,k,l)=>'<label>'+esc(l)+'<input name="'+p+'.'+k+'" type="number" inputmode="decimal" step="any" value="'+val(p,k)+'"></label>';
+  let html='<div class="full hint">'+esc(cName(cid))+' ／ '+mlabel(m)+'。動画ごとの再生数・いいね・コメントと月の投稿本数は、アカウントURLから毎月1日に自動で入ります。ここではお客様向けのコメントと、自動で取れない数字だけを入れます。</div>'
+    +field({k:'note',label:'所感・来月の施策（お客様向けコメント）',type:'textarea',v:ex.note,rows:5})
+    +'<fieldset><legend>フォロワー数（自動で取れなかったときだけ）</legend>'+inp('ig','followers','Instagram')+inp('tt','followers','TikTok')+inp('yt','followers','YouTube 登録者')+'</fieldset>'
+    +'<fieldset><legend>インサイトでしか見られない数字（任意）</legend>'+inp('ig','reach','Instagram リーチ')+inp('ig','saves','Instagram 保存')+inp('yt','watchHours','YouTube 総再生時間(h)')+'</fieldset>';
+  openModal('所感・補足',html,async()=>{
+    const raw=formVals();const d=JSON.parse(JSON.stringify(ex));delete d.id;delete d.updatedAt;
+    Object.assign(d,{clientId:cid,month:m,note:raw.note||''});
+    for(const key of Object.keys(raw)){if(!key.includes('.'))continue;const [p,k]=key.split('.');d[p]=d[p]||{};if(isNum(raw[key]))d[p][k]=raw[key];else delete d[p][k]}
     if(await save('metrics',cid+'_'+m,d)){closeModal();toast('保存しました')}
   });
 }
@@ -485,45 +485,79 @@ function trendSvg(cid,p,m){
   s+='</svg>';
   return'<div class="chart">'+s+'<div class="legend"><span><i style="background:'+col+'"></i>'+(p==='yt'?'登録者':'フォロワー')+'（線）</span><span><i style="background:'+col+';opacity:.3"></i>再生数（棒）</span></div></div>';
 }
+const vidsOf=(d,p)=>(d&&d.videos||[]).filter(v=>v.platform===p);
+const hasPlat=(d,p)=>!!d&&((d[p]&&Object.keys(d[p]).length>0)||vidsOf(d,p).length>0);
 function platMetrics(d,p,cid,m){
-  if(!d||!d[p])return null;const x=Object.assign({},d[p]);
-  if(!isNum(x.posts)){const lv=(d.videos||[]).filter(v=>v.platform===p).length;const c=lv||postedCount(cid,m,p);if(c)x.posts=c}
+  if(!hasPlat(d,p))return null;const x=Object.assign({},d[p]||{});const vs=vidsOf(d,p);
+  if(vs.length){x.posts=vs.length;for(const k of ['views','likes','comments','shares','saves']){const a=vs.filter(v=>isNum(v[k]));if(a.length)x[k]=a.reduce((t,v)=>t+v[k],0)}}
+  else if(!isNum(x.posts)){const c=postedCount(cid,m,p);if(c)x.posts=c}
   if(isNum(x.views)&&isNum(x.posts)&&x.posts>0){x.vpp=x.views/x.posts}
   if(isNum(x.likes)&&isNum(x.posts)&&x.posts>0){x.lpp=x.likes/x.posts}
   const eng=PLAT[p].eng.reduce((a,k)=>a+(isNum(x[k])?x[k]:0),0);
   if(isNum(x.views)&&x.views>0&&PLAT[p].eng.some(k=>isNum(x[k])))x.er=eng/x.views*100;
   return x;
 }
+const vEr=(v,p)=>isNum(v.views)&&v.views>0?PLAT[p].eng.reduce((a,k)=>a+(isNum(v[k])?v[k]:0),0)/v.views*100:null;
+/* Plain-language findings for the month, computed from the per-video data. */
+function analysis(cid,m){
+  const d=metricsFor(cid,m),pd=metricsFor(cid,madd(m,-1)),c=cById(cid);if(!d)return[];
+  const out=[];const q=c?quota(c):null;
+  for(const p of Object.keys(PLAT)){
+    if(!hasPlat(d,p))continue;const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,madd(m,-1))||{};const vs=vidsOf(d,p);
+    let t=PLAT[p].name+'は'+fmt(x.posts||0)+'本投稿'+(isNum(y.posts)?'（前月'+fmt(y.posts)+'本）':'');
+    if(isNum(x.vpp))t+='。1本あたり再生は'+fmt(x.vpp)+'回'+(isNum(y.vpp)&&y.vpp>0?'で、前月より'+(x.vpp>=y.vpp?fmt((x.vpp/y.vpp-1)*100,0)+'%多い':fmt((1-x.vpp/y.vpp)*100,0)+'%少ない'):'');
+    if(isNum(x.followers)&&isNum(y.followers))t+='。'+(p==='yt'?'登録者':'フォロワー')+'は'+(x.followers>=y.followers?'+':'')+fmt(x.followers-y.followers)+'人';
+    out.push(t+'。');
+    const best=vs.filter(v=>isNum(v.views)).sort((a,b)=>b.views-a.views)[0];
+    if(best&&vs.length>1&&isNum(x.vpp)&&x.vpp>0)out.push(PLAT[p].name+'で最も再生されたのは「'+(best.title||'無題').slice(0,30)+'」（'+fmt(best.views)+'回、平均の'+fmt(best.views/x.vpp,1)+'倍）。');
+  }
+  if(q){const sp=['ig','tt'].map(p=>vidsOf(d,p).length).reduce((a,b)=>Math.max(a,b),0);const lp=vidsOf(d,'yt').filter(v=>v.kind!=='short').length;
+    if(sp&&q.short&&sp<q.short)out.push('ショート動画の投稿が契約本数（月'+q.short+'本）に対して'+sp+'本です。');
+    if(d.videos&&q.long&&lp<q.long&&hasPlat(d,'yt'))out.push('YouTube（横動画）の投稿が契約本数（月'+q.long+'本）に対して'+lp+'本です。');}
+  return out;
+}
+function videoTableHtml(cid,m){
+  const d=metricsFor(cid,m),pd=metricsFor(cid,madd(m,-1));const vs=(d&&d.videos||[]).slice();if(!vs.length)return'';
+  const prevAvg={};for(const p of Object.keys(PLAT)){const y=platMetrics(pd,p,cid,madd(m,-1));if(y&&isNum(y.vpp))prevAvg[p]=y.vpp}
+  const key=S.vsort||'date';vs.sort((a,b)=>key==='views'?(b.views||0)-(a.views||0):(b.date||'').localeCompare(a.date||''));
+  const best={};vs.forEach(v=>{if(isNum(v.views)&&(!best[v.platform]||v.views>best[v.platform].views))best[v.platform]=v});
+  return'<div class="sec"><div class="sec-h"><h3>動画ごとの数字（'+vs.length+'本）</h3><div class="filters"><span class="hint">並び順</span><button class="'+(key==='date'?'primary':'')+'" data-act="vsort" data-k="date">投稿日</button><button class="'+(key==='views'?'primary':'')+'" data-act="vsort" data-k="views">再生数</button></div></div>'
+    +'<div class="scroll"><table><thead><tr><th>媒体</th><th>投稿日</th><th>動画</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th><th class="r">シェア</th><th class="r">保存</th><th class="r">ER</th><th class="r">前月平均比</th></tr></thead><tbody>'
+    +vs.map(v=>{const p=v.platform;const pa=prevAvg[p];const r=isNum(v.views)&&pa?(v.views/pa-1)*100:null;const er=vEr(v,p);
+      return'<tr><td>'+pfTags([p])+(v.kind==='short'?'<span class="hint">ショート</span>':'')+'</td><td class="num">'+dlabel(v.date)+'</td><td class="wrap">'+(best[p]===v&&vs.filter(w=>w.platform===p).length>1?'<span class="chip good">最多</span> ':'')+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="r num"><b>'+fmt(v.views)+'</b></td><td class="r num">'+fmt(v.likes)+'</td><td class="r num">'+fmt(v.comments)+'</td><td class="r num">'+fmt(v.shares)+'</td><td class="r num">'+fmt(v.saves)+'</td><td class="r num">'+(isNum(er)?fmt(er,1)+'%':'—')+'</td><td class="r num">'+(isNum(r)?'<span class="'+(r>=0?'up':'down')+'">'+(r>=0?'+':'')+fmt(r,0)+'%</span>':'<span class="hint">—</span>')+'</td></tr>'}).join('')
+    +'</tbody></table></div><p class="hint" style="margin:0">再生・いいね等は取得日（翌月1日）時点の数字。ER＝（いいね＋コメント＋シェア・保存）÷ 再生。前月平均比＝その動画の再生数 ÷ 前月の1本あたり平均再生。</p></div>';
+}
 function viewRep(){
   const cl=activeClients(); if(!cl.length)return needClients();
   const m=S.month,pm=madd(m,-1);
-  let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の数値を入力</button><button data-act="copyRep">報告文をコピー</button>'+(S.dl?'<button data-act="pdfOne" data-id="'+S.repClient+'">PDFを保存</button>':''):(S.dl?'<button class="primary" data-act="pdfAll">全クライアントのPDFを一括保存</button>':''))+'</div></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の所感・補足</button><button data-act="copyRep">報告文をコピー</button>'+(S.dl?'<button data-act="pdfOne" data-id="'+S.repClient+'">PDFを保存</button>':''):(S.dl?'<button class="primary" data-act="pdfAll">全クライアントのPDFを一括保存</button>':''))+'</div></div>';
   if(!S.repClient){
     h+='<p class="hint" style="margin:0">'+mlabel(m)+'の数値と、前月（'+mlabel(pm)+'）との比較です。クライアント名を押すと詳しいレポートを開きます。</p><div class="scroll"><table><thead><tr><th>クライアント</th><th>入力</th>'
-      +Object.entries(PLAT).map(([p,d])=>'<th class="r"><span class="pf '+p+'">'+p.toUpperCase()+'</span>'+(p==='yt'?'登録者':'フォロワー')+'</th><th class="r">'+'再生数'+'</th>').join('')+'</tr></thead><tbody>'
+      +Object.entries(PLAT).map(([p,d])=>'<th class="r"><span class="pf '+p+'">'+p.toUpperCase()+'</span>'+(p==='yt'?'登録者':'フォロワー')+'</th><th class="r">'+'再生数'+'</th>').join('')+'<th class="r">投稿本数</th></tr></thead><tbody>'
       +cl.map(c=>{const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
-        return'<tr><td><button class="ghost" style="padding:0;font-weight:700" data-act="openRep" data-id="'+c.id+'">'+esc(c.name)+'</button></td><td>'+(d?'<span class="chip good">済</span>':'<button class="chip warn" data-act="editMetrics" data-id="'+c.id+'" style="background:none">未入力</button>')+'</td>'
-        +Object.keys(PLAT).map(p=>{const a=d&&d[p]||{},b=pd&&pd[p]||{};return'<td class="r num">'+fmt(a.followers)+'<div style="font-size:11px">'+(isNum(a.followers)?deltaHtml(a.followers,b.followers):'')+'</div></td><td class="r num">'+fmt(a.views)+'<div style="font-size:11px">'+(isNum(a.views)?deltaHtml(a.views,b.views):'')+'</div></td>'}).join('')+'</tr>'}).join('')
+        return'<tr><td><button class="ghost" style="padding:0;font-weight:700" data-act="openRep" data-id="'+c.id+'">'+esc(c.name)+'</button></td><td>'+(d?'<span class="chip good">済</span>':'<span class="chip warn">未取得</span>')+'</td>'
+        +Object.keys(PLAT).map(p=>{const a=platMetrics(d,p,c.id,m)||{},b=platMetrics(pd,p,c.id,pm)||{};return'<td class="r num">'+fmt(a.followers)+'<div style="font-size:11px">'+(isNum(a.followers)?deltaHtml(a.followers,b.followers):'')+'</div></td><td class="r num">'+fmt(a.views)+'<div style="font-size:11px">'+(isNum(a.views)?deltaHtml(a.views,b.views):'')+'</div></td>'}).join('')+'<td class="r num">'+fmt(Object.keys(PLAT).reduce((t,p)=>{const x=platMetrics(d,p,c.id,m);return t+(x&&isNum(x.posts)?x.posts:0)},0)||null)+'</td></tr>'}).join('')
       +'</tbody></table></div></section>';
     return h;
   }
   const c=cById(S.repClient); if(!c){S.repClient='';return viewRep()}
   const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
   h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(d&&d.source==='apify'?' ・ <span class="chip good">自動取得 '+dlabel((d.collectedAt||'').slice(0,10))+'</span>':'')+'</div></div>';
-  if(!d){h+='<div class="empty"><b>'+mlabel(m)+'の数値がまだ入っていません</b><span>各SNSのインサイト画面の数字を入力すると、前月との比較・1本あたりの成果・推移グラフが自動で作られます。</span><button class="primary" data-act="editMetrics" data-id="'+c.id+'">数値を入力</button></div></section>';return h}
-  // headline summary
+  if(!d){const urls=['ig','tt','yt'].filter(p=>c[p]);
+    h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）から、翌月1日の朝に動画ごとの数字が自動で入ります。':'クライアントタブでアカウントURLを登録すると、毎月1日に動画ごとの数字が自動で入ります。')+'</span>'+(urls.length?'':'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
+  const tot=(doc,mm,k)=>doc?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(doc,p,c.id,mm);return a+(x&&isNum(x[k])?x[k]:0)},0):null;
   const sumF=followersTotal(c.id,m),sumPF=followersTotal(c.id,pm);
-  const sumV=Object.keys(PLAT).reduce((a,p)=>a+((d[p]&&isNum(d[p].views))?d[p].views:0),0);
-  const sumPV=pd?Object.keys(PLAT).reduce((a,p)=>a+((pd[p]&&isNum(pd[p].views))?pd[p].views:0),0):null;
-  const posts=Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(d,p,c.id,m);return a+(x&&isNum(x.posts)?x.posts:0)},0);
-  const pposts=pd?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(pd,p,c.id,pm);return a+(x&&isNum(x.posts)?x.posts:0)},0):null;
+  const sumV=tot(d,m,'views'),sumPV=tot(pd,pm,'views'),posts=tot(d,m,'posts'),pposts=tot(pd,pm,'posts');
   h+='<div class="tiles">'
     +'<div class="tile"><span class="lbl">フォロワー合計（3媒体）</span><span class="val">'+fmt(sumF)+'</span><span class="sub num">'+deltaHtml(sumF,sumPF)+'</span></div>'
-    +'<div class="tile"><span class="lbl">総再生数</span><span class="val">'+fmt(sumV)+'</span><span class="sub num">'+deltaHtml(sumV,sumPV||null)+'</span></div>'
     +'<div class="tile"><span class="lbl">投稿本数</span><span class="val">'+fmt(posts)+'</span><span class="sub num">'+deltaHtml(posts,pposts)+'</span></div>'
+    +'<div class="tile"><span class="lbl">総再生数</span><span class="val">'+fmt(sumV)+'</span><span class="sub num">'+deltaHtml(sumV,sumPV||null)+'</span></div>'
     +'<div class="tile"><span class="lbl">1本あたり再生数</span><span class="val">'+fmt(posts?sumV/posts:null)+'</span><span class="sub num">'+deltaHtml(posts?sumV/posts:null,pposts?sumPV/pposts:null)+'</span></div></div>';
+  const an=analysis(c.id,m);
+  if(an.length)h+='<div class="sec"><h3>今月のポイント（自動分析）</h3><ul class="note" style="margin:0;padding-left:28px">'+an.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul></div>';
+  h+=videoTableHtml(c.id,m);
   for(const [p,def] of Object.entries(PLAT)){
-    const x=platMetrics(d,p,c.id,m); if(!x||!Object.keys(d[p]).length)continue;
+    if(!hasPlat(d,p))continue;const x=platMetrics(d,p,c.id,m);
     const y=platMetrics(pd,p,c.id,pm)||{};
     const pp=metricsFor(c.id,madd(pm,-1));const gainPrev=(isNum(y.followers)&&pp&&pp[p]&&isNum(pp[p].followers))?y.followers-pp[p].followers:null;
     const gain=isNum(x.followers)&&isNum(y.followers)?x.followers-y.followers:null;
@@ -534,12 +568,12 @@ function viewRep(){
     kp.push({l:'1本あたり再生',v:x.vpp,pv:y.vpp,key:1});
     kp.push({l:'1本あたりいいね',v:x.lpp,pv:y.lpp});
     kp.push({l:'エンゲージメント率',v:x.er,pv:y.er,dp:2,pct:1});
-    h+='<div class="plat"><div class="plat-h"><span class="dot" style="background:var(--'+p+')"></span><h3>'+def.name+'</h3>'+(c[p]?'<span class="hint">'+esc(c[p])+'</span>':'')+'</div><div class="plat-body"><div class="kpis">'
+    h+='<div class="plat"><div class="plat-h"><span class="dot" style="background:var(--'+p+')"></span><h3>'+def.name+' の月間合計</h3>'+(c[p]?'<a class="hint" href="'+esc(c[p])+'" target="_blank" rel="noopener">'+esc(c[p])+'</a>':'')+'</div><div class="plat-body"><div class="kpis">'
       +kp.filter(k=>isNum(k.v)).map(k=>'<div class="kpi'+(k.key?' key-kpi':'')+'"><span class="lbl">'+esc(k.l)+'</span><span class="v">'+(k.signed&&k.v>0?'+':'')+fmt(k.v,k.dp)+(k.pct?'<small style="font-size:13px">%</small>':'')+'</span><span class="cmp">'+deltaHtml(k.v,k.pv,{dp:k.dp,pct:k.pct})+'</span><span class="prev">前月 '+(isNum(k.pv)?(k.signed&&k.pv>0?'+':'')+fmt(k.pv,k.dp)+(k.pct?'%':''):'—')+'</span></div>').join('')
-      +'</div>'+trendSvg(c.id,p,m)+'</div>'+topVideosHtml(d,p)+'</div>';
+      +'</div>'+trendSvg(c.id,p,m)+'</div></div>';
   }
   if(d.note)h+='<div class="sec"><h3>所感・来月の施策</h3><div class="note">'+esc(d.note)+'</div></div>';
-  h+='<p class="hint" style="margin:0">エンゲージメント率＝（いいね＋コメント＋保存/シェア）÷ 再生数。1本あたり＝月の数値 ÷ 投稿本数。'+(d.source==='apify'?'自動取得の再生数・いいね等は、その月に投稿した動画の取得日時点の合計です。':'')+'</p></section>';
+  h+='</section>';
   return h;
 }
 function reportText(){
@@ -547,8 +581,9 @@ function reportText(){
   if(!d)return null;
   const line=(l,v,pv,dp)=>{if(!isNum(v))return null;let s=l+'：'+fmt(v,dp);if(isNum(pv)){const df=v-pv;s+='（前月比 '+(df>=0?'+':'')+fmt(df,dp)+(pv?(' / '+(df>=0?'+':'')+fmt(df/Math.abs(pv)*100,1)+'%'):'')+'）'}return s};
   let t='【'+mlabel(m)+' SNS運用レポート】\n'+c.name+' 様\n';
-  for(const [p,def] of Object.entries(PLAT)){const x=platMetrics(d,p,c.id,m);if(!x||!Object.keys(d[p]).length)continue;const y=platMetrics(pd,p,c.id,pm)||{};
+  for(const [p,def] of Object.entries(PLAT)){if(!hasPlat(d,p))continue;const x=platMetrics(d,p,c.id,m);const y=platMetrics(pd,p,c.id,pm)||{};
     t+='\n■'+def.name+'\n'+[line(def.fields[0][1],x.followers,y.followers)].concat(def.fields.slice(1).map(([k,l])=>line(l,x[k],y[k],k==='watchHours'?1:0)),[line('1本あたり再生',x.vpp,y.vpp)]).filter(Boolean).join('\n')+'\n'}
+  const an=analysis(c.id,m);if(an.length)t+='\n■今月のポイント\n'+an.map(x=>'・'+x).join('\n')+'\n';
   if(d.note)t+='\n■所感・来月の施策\n'+d.note+'\n';
   return t;
 }
@@ -566,8 +601,6 @@ function viewCli(){
 
 /* ---------- top videos (per-video data in a metrics doc: videos:[{platform,title,url,date,views,likes,comments}]) ---------- */
 function topVideos(d,p,n){const vs=(d&&d.videos||[]).filter(v=>v.platform===p);return vs.slice().sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,n||5)}
-function topVideosHtml(d,p){const vs=topVideos(d,p,5);if(!vs.length)return'';
-  return'<div class="scroll"><table><thead><tr><th>再生数上位の動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+vs.map(v=>'<tr><td class="wrap">'+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="num">'+dlabel(v.date)+'</td><td class="r num">'+fmt(v.views)+'</td><td class="r num">'+fmt(v.likes)+'</td><td class="r num">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table></div>'}
 const company=()=>((S.settings.find(x=>x.id==='main')||{}).company||'');
 
 /* ---------- PDF report (fixed light print palette, A4 pages rendered to canvas) ---------- */
@@ -588,12 +621,12 @@ function pdfPages(cid,m){
   const tot=(doc,mm,k)=>doc?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(doc,p,cid,mm);return a+(x&&isNum(x[k])?x[k]:0)},0):null;
   const V=tot(d,m,'views'),PV=tot(pd,pm,'views'),P=tot(d,m,'posts'),PP=tot(pd,pm,'posts');
   const box=(l,v,pv,o)=>{o=o||{};return'<div class="box'+(o.hl?' hl':'')+'"><span class="l">'+esc(l)+'</span><span class="v">'+(o.signed&&v>0?'+':'')+fmt(v,o.dp)+(o.pct&&isNum(v)?'%':'')+'</span><span class="c">'+deltaHtml(v,pv,{dp:o.dp,pct:o.pct})+'</span><span class="p">前月 '+(isNum(pv)?(o.signed&&pv>0?'+':'')+fmt(pv,o.dp)+(o.pct?'%':''):'—')+'</span></div>'};
-  const plats=Object.keys(PLAT).filter(p=>d[p]&&Object.keys(d[p]).length);
+  const plats=Object.keys(PLAT).filter(p=>hasPlat(d,p));const an=analysis(cid,m);
   pages.push('<div class="band"><div class="k">SNS運用 月次レポート</div><div class="n">'+esc(c.name)+' 様</div><div class="m">'+mlabel(m)+'</div></div><div class="body">'
     +'<h4>今月のサマリー</h4><div class="t4">'+box('フォロワー合計',sumF,sumPF,{hl:1})+box('総再生数',V,PV)+box('投稿本数',P,PP)+box('1本あたり再生',P?V/P:null,PP?PV/PP:null)+'</div>'
     +'<h4>媒体別の結果（前月比）</h4><table><thead><tr><th>媒体</th><th class="r">フォロワー</th><th class="r">増減</th><th class="r">再生数</th><th class="r">増減</th><th class="r">投稿</th><th class="r">1本あたり再生</th></tr></thead><tbody>'
     +plats.map(p=>{const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};return'<tr><td><b style="color:var(--'+p+')">■</b> '+PLAT[p].name+'</td><td class="r">'+fmt(x.followers)+'</td><td class="r">'+deltaHtml(x.followers,y.followers)+'</td><td class="r">'+fmt(x.views)+'</td><td class="r">'+deltaHtml(x.views,y.views)+'</td><td class="r">'+fmt(x.posts)+'</td><td class="r">'+fmt(x.vpp)+'</td></tr>'}).join('')+'</tbody></table>'
-    +(d.note?'<h4>所感・来月の施策</h4><div class="note">'+esc(d.note)+'</div>':'')+'</div>');
+    +(an.length?'<h4>今月のポイント</h4><ul class="note" style="margin:0;padding-left:28px">'+an.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':'')+(d.note?'<h4>所感・来月の施策</h4><div class="note">'+esc(d.note)+'</div>':'')+'</div>');
   for(const p of plats){
     const def=PLAT[p],x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};
     const pp=metricsFor(cid,madd(pm,-1));const gain=isNum(x.followers)&&isNum(y.followers)?x.followers-y.followers:null;
@@ -601,10 +634,10 @@ function pdfPages(cid,m){
     const ks=[box(def.fields[0][1],x.followers,y.followers,{hl:1}),isNum(gain)?box('今月の増加数',gain,gainPrev,{hl:1,signed:1}):'']
       .concat(def.fields.slice(1).filter(([k])=>isNum(x[k])).map(([k,l])=>box(l,x[k],y[k],{dp:k==='watchHours'?1:0})))
       .concat([isNum(x.vpp)?box('1本あたり再生',x.vpp,y.vpp,{hl:1}):'',isNum(x.er)?box('エンゲージメント率',x.er,y.er,{dp:2,pct:1}):'']);
-    const tv=topVideos(d,p,8);
+    const tv=vidsOf(d,p).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).slice(0,14);
     pages.push('<div class="phead" style="--pc:var(--'+p+')"><i></i><b>'+def.name+'</b><span>'+esc(c.name)+' 様 ／ '+mlabel(m)+'</span></div><div class="body">'
       +'<div class="t3">'+ks.join('')+'</div><h4>6ヶ月の推移</h4>'+trendSvg(cid,p,m)
-      +(tv.length?'<h4>再生数の多かった動画</h4><table><thead><tr><th>動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+tv.map(v=>'<tr><td>'+esc((v.title||'(無題)').slice(0,40))+'</td><td>'+dlabel(v.date)+'</td><td class="r">'+fmt(v.views)+'</td><td class="r">'+fmt(v.likes)+'</td><td class="r">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table>':'')
+      +(tv.length?'<h4>今月投稿した動画（'+vidsOf(d,p).length+'本）</h4><table><thead><tr><th>動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+tv.map(v=>'<tr><td>'+esc((v.title||'(無題)').slice(0,40))+'</td><td>'+dlabel(v.date)+'</td><td class="r">'+fmt(v.views)+'</td><td class="r">'+fmt(v.likes)+'</td><td class="r">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table>':'')
       +'</div>');
   }
   return pages.map((h,i)=>h+'<div class="foot"><span>'+esc(company()||'SNS運用 月次レポート')+'</span><span>発行日 '+issued+' ・ '+(i+1)+' / '+pages.length+'</span></div>');
@@ -627,21 +660,21 @@ async function pdfBlob(cid,m){
 const pdfName=(cid,m)=>'SNSレポート_'+cName(cid).replace(/[\\/:*?"<>|]/g,'')+'_'+m.replace('-','年')+'月.pdf';
 async function saveFile(filename,data){try{await S.dl.save({filename,data});toast('保存しました')}catch(e){if(!(e&&e.code==='declined'))toast('保存できませんでした（'+(e&&e.code||'error')+'）')}}
 async function pdfOne(cid){
-  if(!metricsFor(cid,S.month)){toast(mlabel(S.month)+'の数値が未入力です');return}
+  if(!metricsFor(cid,S.month)){toast(mlabel(S.month)+'のデータがまだありません');return}
   toast('PDFを作成中…');let b;
   try{b=await pdfBlob(cid,S.month)}catch(e){toast('PDFを作成できませんでした。ページを開き直してください');return}
   await saveFile(pdfName(cid,S.month),b);
 }
 async function pdfAll(){
   const m=S.month;const ids=activeClients().filter(c=>metricsFor(c.id,m)).map(c=>c.id);
-  if(!ids.length){toast(mlabel(m)+'の数値が入っているクライアントがありません');return}
+  if(!ids.length){toast(mlabel(m)+'のデータがあるクライアントがありません');return}
   if(!window.JSZip){toast('ZIPを作れませんでした。ページを開き直してください');return}
   const zip=new window.JSZip();
   try{for(let i=0;i<ids.length;i++){toast('PDFを作成中… '+(i+1)+' / '+ids.length);zip.file(pdfName(ids[i],m),await pdfBlob(ids[i],m))}}
   catch(e){toast('PDFを作成できませんでした。ページを開き直してください');return}
   const skipped=activeClients().length-ids.length;
   await saveFile('SNSレポート_'+m.replace('-','年')+'月_'+ids.length+'社.zip',await zip.generateAsync({type:'blob'}));
-  if(skipped)setTimeout(()=>toast('数値未入力の'+skipped+'社は含まれていません'),2700);
+  if(skipped)setTimeout(()=>toast('データ未取得の'+skipped+'社は含まれていません'),2700);
 }
 
 /* ---------- render ---------- */
@@ -678,6 +711,7 @@ document.addEventListener('click',async e=>{
     case'editMetrics':editMetrics(id,S.month);break;
     case'openRep':S.repClient=id;S.tab='rep';try{localStorage.setItem('vh.rep',id);localStorage.setItem('vh.tab','rep')}catch(_){}render();window.scrollTo(0,0);break;
     case'edFilter':S.f.editor=t.dataset.name;S.f.scope='month';S.tab='prod';render();break;
+    case'vsort':S.vsort=t.dataset.k;render();break;
     case'pdfOne':pdfOne(id);break;
     case'pdfAll':pdfAll();break;
     case'saveCompany':{const v=document.getElementById('set-company').value.trim();if(await save('settings','main',{company:v}))toast('保存しました');break}

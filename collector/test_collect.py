@@ -12,7 +12,7 @@ TT = [{"authorMeta": {"name": "shop_a", "fans": 950}, "webVideoUrl": "https://ww
        "playCount": 5000, "diggCount": 200, "commentCount": 5, "shareCount": 3, "collectCount": 9, "text": "tour"},
       {"authorMeta": {"name": "shop_a", "fans": 950}, "webVideoUrl": "https://www.tiktok.com/@shop_a/video/2", "createTimeISO": "2026-09-10T03:00:00.000Z",
        "playCount": 1000, "diggCount": 50, "commentCount": 1, "shareCount": 0, "collectCount": 1}]
-YT = [{"numberOfSubscribers": 4210, "url": "https://www.youtube.com/watch?v=a", "title": "Room tour", "date": "2026-09-12T00:00:00.000Z", "viewCount": 3000, "likes": 80, "commentsCount": 4}]
+YT = [{"numberOfSubscribers": 4210, "url": "https://www.youtube.com/watch?v=a", "title": "Room tour", "date": "2026-09-12T00:00:00.000Z", "viewCount": 3000, "likes": 80, "commentsCount": 4, "duration": "10:21"}]
 
 
 class T(unittest.TestCase):
@@ -40,6 +40,12 @@ class T(unittest.TestCase):
         self.assertEqual(d["yt"]["posts"], 1)
         self.assertEqual(len(d["videos"]), 3)
         self.assertEqual(d["videos"][0]["title"], "Before/After")
+        self.assertEqual(d["videos"][2]["kind"], "long")
+
+    def test_is_short(self):
+        self.assertTrue(collect.is_short({"url": "https://www.youtube.com/shorts/abc"}))
+        self.assertTrue(collect.is_short({"url": "https://www.youtube.com/watch?v=a", "duration": "0:58"}))
+        self.assertFalse(collect.is_short({"url": "https://www.youtube.com/watch?v=a", "duration": "12:04"}))
 
     def test_failed_platform_is_reported(self):
         def boom(a, i, t):
