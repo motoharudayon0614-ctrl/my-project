@@ -104,6 +104,7 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .cal .day.out{background:var(--sunk);opacity:.55}
 .cal .day.today .d{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:0 6px}
 .cal .d{font-family:var(--num);font-size:13px;align-self:flex-start}
+.ev .evs{display:block;font-size:10px;color:var(--muted);white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .ev{font-size:11px;line-height:1.35;padding:1px 5px;border-radius:4px;border-left:3px solid;background:var(--sunk);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-align:left;border-top:0;border-right:0;border-bottom:0;width:100%}
 .ev.shoot{border-color:var(--shoot)} .ev.due{border-color:var(--due)} .ev.post{border-color:var(--post)}
 .ev.done{opacity:.55;text-decoration:line-through}
@@ -139,7 +140,7 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .modal .mh{display:flex;justify-content:space-between;align-items:center}
 .form{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .form label{display:grid;gap:3px;font-size:12px;color:var(--muted);min-width:0}
-.form label.full{grid-column:1/-1}
+.form label.full,.form .full{grid-column:1/-1}
 .form input,.form select,.form textarea{width:100%;color:var(--ink)}
 .form fieldset{grid-column:1/-1;border:1px solid var(--line);border-radius:8px;padding:8px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px 12px;margin:0}
 .form legend{font-size:12px;font-weight:700;padding:0 4px;color:var(--ink)}
@@ -219,7 +220,9 @@ try{S.payBasis=localStorage.getItem('vh.pay')||'stored';const t=localStorage.get
 const cById=id=>S.clients.find(c=>c.id===id);
 const cName=id=>{const c=cById(id);return c?c.name:'(削除済み)'};
 const activeClients=()=>S.clients.filter(c=>c.active!==false).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ja'));
-const quota=c=>{const p=PLANS[c.plan]||PLANS.custom;return{short:isNum(c.shortQuota)?c.shortQuota:p.short,long:isNum(c.longQuota)?c.longQuota:p.long}};
+const quota=(c,m)=>{m=m||S.month;const p=PLANS[c.plan]||PLANS.custom;let q={short:isNum(c.shortQuota)?c.shortQuota:p.short,long:isNum(c.longQuota)?c.longQuota:p.long};
+  const hist=(c.quotaHistory||[]).filter(h=>h.from<=m).sort((a,b)=>a.from.localeCompare(b.from)).pop();if(hist)q={short:hist.short,long:hist.long};
+  const one=(c.quotaMonths||{})[m];if(one)q={short:one.short,long:one.long,oneMonth:true};return q};
 const isLate=v=>v.dueDate&&v.dueDate<TODAY&&!DONE.has(v.status);
 const metricsFor=(cid,m)=>S.metrics.find(x=>x.clientId===cid&&x.month===m);
 const editors=()=>[...new Set(S.videos.map(v=>(v.editor||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
@@ -364,7 +367,7 @@ function viewDash(){
   const wk=dadd(TODAY,7);
   const shootsWk=S.shoots.filter(s=>s.date>=TODAY&&s.date<=wk).length;
   const postsWk=S.videos.filter(v=>v.postDate>=TODAY&&v.postDate<=wk).length;
-  const quotaTotal=cl.reduce((a,c)=>{const q=quota(c);return a+q.short+q.long},0);
+  const quotaTotal=cl.reduce((a,c)=>{const q=quota(c,m);return a+q.short+q.long},0);
   const doneM=mv.filter(v=>DONE.has(v.status)).length;
   let h='<section class="sec"><div class="sec-h"><h2>'+mlabel(m)+'の状況</h2><span class="hint">今日 '+dlabel(TODAY)+'</span></div><div class="tiles">'
     +'<div class="tile"><span class="lbl">運用中クライアント</span><span class="val">'+cl.length+'</span><span class="sub">BASIC '+cl.filter(c=>c.plan==='basic').length+' ／ PRO '+cl.filter(c=>c.plan==='pro').length+'</span></div>'
@@ -380,7 +383,7 @@ function viewDash(){
   const pm=madd(m,-1);
   h+='<section class="sec"><div class="sec-h"><h2>クライアント別</h2><span class="hint">制作は納期が'+mshort(m)+'の動画、フォロワーは'+mshort(m)+'と'+mshort(pm)+'の入力値で比較</span></div><div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th>ショート</th><th>YouTube</th><th>遅れ</th><th>次の撮影</th><th>次の投稿</th><th class="r">フォロワー合計</th><th>前月比</th></tr></thead><tbody>'
     +cl.map(c=>{
-      const q=quota(c);const vs=mv.filter(v=>v.clientId===c.id);
+      const q=quota(c,m);const vs=mv.filter(v=>v.clientId===c.id);
       const sd=vs.filter(v=>v.type!=='long'&&DONE.has(v.status)).length, ld=vs.filter(v=>v.type==='long'&&DONE.has(v.status)).length;
       const lt=S.videos.filter(v=>v.clientId===c.id&&isLate(v)).length;
       const ns=S.shoots.filter(s=>s.clientId===c.id&&s.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date))[0];
@@ -491,7 +494,7 @@ function viewEd(){
 
 function calEvents(){
   const ev=[];const cf=S.calClient;
-  S.shoots.forEach(s=>{if(cf&&s.clientId!==cf)return;ev.push({d:s.date,k:'shoot',t:'撮影 '+cName(s.clientId)+(s.time?' '+s.time:''),sub:(s.place||'')+(s.people?' ・'+s.people+'名':''),id:s.id,act:'editShoot'})});
+  S.shoots.forEach(s=>{if(cf&&s.clientId!==cf)return;ev.push({d:s.date,k:'shoot',t:'撮影 '+cName(s.clientId)+(s.time?' '+s.time:''),sub:[s.place,s.people?s.people+'名':'',s.memo].filter(Boolean).join(' ・ '),id:s.id,act:'editShoot'})});
   S.videos.forEach(v=>{if(cf&&v.clientId!==cf)return;
     if(v.dueDate)ev.push({d:v.dueDate,k:'due',t:'納期 '+cName(v.clientId)+'｜'+v.title,sub:(v.editor||'担当未定')+' ・ '+v.status,id:v.id,act:'editVideo',done:DONE.has(v.status),late:isLate(v)});
     if(v.postDate)ev.push({d:v.postDate,k:'post',t:'投稿 '+cName(v.clientId)+'｜'+v.title,sub:(v.platforms||[]).map(p=>PLAT[p]?PLAT[p].name:p).join('・'),pf:v.platforms,id:v.id,act:'editVideo',done:v.status==='投稿済'});
@@ -511,7 +514,7 @@ function viewCal(){
     const d=dadd(start,i);if(i>=35&&!d.startsWith(m))break;
     const es=byDay[d]||[];
     h+='<div class="day'+(d.startsWith(m)?'':' out')+(d===TODAY?' today':'')+'"><span class="d">'+Number(d.slice(8))+'</span>'
-      +es.slice(0,5).map(e=>'<button class="ev '+e.k+(e.done?' done':'')+'" data-act="'+e.act+'" data-id="'+e.id+'" title="'+esc(e.t+' / '+e.sub)+'"'+(e.late?' style="color:var(--bad)"':'')+'>'+esc(e.t)+'</button>').join('')
+      +es.slice(0,5).map(e=>'<button class="ev '+e.k+(e.done?' done':'')+'" data-act="'+e.act+'" data-id="'+e.id+'" title="'+esc(e.t+' / '+e.sub)+'"'+(e.late?' style="color:var(--bad)"':'')+'>'+esc(e.t)+(e.k==='shoot'&&e.sub?'<span class="evs">'+esc(e.sub)+'</span>':'')+'</button>').join('')
       +(es.length>5?'<span class="hint">他 '+(es.length-5)+'件</span>':'')+'</div>';
   }
   h+='</div></div></section>';
@@ -558,7 +561,7 @@ const vEr=(v,p)=>isNum(v.views)&&v.views>0?RP[p].eng.reduce((a,k)=>a+(isNum(v[k]
 /* Plain-language findings for the month, computed from the per-video data. */
 function analysis(cid,m){
   const d=metricsFor(cid,m),pd=metricsFor(cid,madd(m,-1)),c=cById(cid);if(!d)return[];
-  const out=[];const q=c?quota(c):null;
+  const out=[];const q=c?quota(c,m):null;
   for(const p of reportPlats(d)){
     if(!hasPlat(d,p))continue;const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,madd(m,-1))||{};const vs=vidsOf(d,p);
     let t=RP[p].name+'は'+fmt(x.posts||0)+'本投稿'+(isNum(y.posts)?'（前月'+fmt(y.posts)+'本）':'');
@@ -758,7 +761,7 @@ function sheetBar(){
    Instagram / TikTok / YouTube Shorts (one video posted to three apps counts once). Long-form = YouTube 横動画. */
 const OPTION_PRICE={short:30000,long:50000};
 function contractRows(cid,m){
-  const c=cById(cid);if(!c)return[];const q=quota(c);const d=metricsFor(cid,m);
+  const c=cById(cid);if(!c)return[];const q=quota(c,m);const d=metricsFor(cid,m);
   const per={ig:vidsOf(d,'ig').length,tt:vidsOf(d,'tt').length,yts:vidsOf(d,'yts').length};
   const shortA=d?Math.max(per.ig,per.tt,per.yts):null, longA=d?vidsOf(d,'ytl').length:null;
   const sheet=S.videos.filter(v=>v.clientId===cid&&(v.postDate||'').startsWith(m)).length;
@@ -770,11 +773,28 @@ function contractVerdict(r){
   const diff=r.a-r.q;
   return diff>0?{cls:'warn',txt:'+'+diff+'本 超過',diff}:diff<0?{cls:'bad',txt:diff+'本 不足',diff}:{cls:'good',txt:'契約どおり',diff};
 }
+function editQuota(cid,m){
+  const c=cById(cid);if(!c)return;const q=quota(c,m);
+  const html='<div class="full hint">'+esc(c.name)+'の契約本数を変更します。今の'+mlabel(m)+'の契約：ショート'+q.short+'本・横動画'+q.long+'本'+(q.oneMonth?'（この月だけの設定）':'')+'</div>'
+    +field({k:'short',label:'ショート動画（本／月）',type:'number',v:q.short})+field({k:'long',label:'YouTube横動画（本／月）',type:'number',v:q.long})
+    +field({k:'scope',label:'いつから',type:'select',full:true,v:'from',options:[['from',mlabel(m)+'以降ずっと（契約の変更）'],['one',mlabel(m)+'だけ（イレギュラー対応）']]})
+    +((c.quotaHistory||[]).length||Object.keys(c.quotaMonths||{}).length?'<div class="full hint">これまでの変更：'+(c.quotaHistory||[]).slice().sort((a,b)=>a.from.localeCompare(b.from)).map(h=>mlabel(h.from)+'〜 ショート'+h.short+'・横'+h.long).concat(Object.entries(c.quotaMonths||{}).sort().map(([mm,o])=>mlabel(mm)+'のみ ショート'+o.short+'・横'+o.long)).join(' ／ ')+'</div>':'');
+  openModal('契約本数を変更',html,async()=>{
+    const v=formVals();if(!isNum(v.short)||!isNum(v.long)||v.short<0||v.long<0){toast('本数を0以上の数字で入れてください');return}
+    const d=Object.assign({},c);delete d.id;
+    if(v.scope==='one'){d.quotaMonths=Object.assign({},c.quotaMonths||{},{[m]:{short:v.short,long:v.long}})}
+    else{d.quotaHistory=(c.quotaHistory||[]).filter(h=>h.from!==m).concat([{from:m,short:v.short,long:v.long}]);
+      const qm=Object.assign({},c.quotaMonths||{});delete qm[m];d.quotaMonths=qm}
+    if(await save('clients',cid,d)){closeModal();toast('契約本数を更新しました')}
+  },(c.quotaMonths||{})[m]||(c.quotaHistory||[]).some(h=>h.from===m)?async()=>{
+    const d=Object.assign({},c);delete d.id;d.quotaHistory=(c.quotaHistory||[]).filter(h=>h.from!==m);const qm=Object.assign({},c.quotaMonths||{});delete qm[m];d.quotaMonths=qm;
+    if(await save('clients',cid,d)){closeModal();toast(mlabel(m)+'の変更を取り消しました')}}:null);
+}
 function contractHtml(cid,m){
   const rows=contractRows(cid,m);const c=cById(cid);
-  if(!rows.length)return'<div class="sec"><h3>契約本数との比較</h3><div class="notice">契約本数が未設定です。クライアントタブでプラン（BASIC／PRO）か月の本数を設定すると、超過・不足を自動で判定します。 <button class="ghost" data-act="editClient" data-id="'+cid+'">設定する</button></div></div>';
-  const live=m===ymOf(TODAY);
-  return'<div class="sec"><h3>契約本数との比較</h3><div class="scroll"><table><thead><tr><th>種類</th><th class="r">契約（月）</th><th class="r">投稿実績</th><th>判定</th><th class="r">超過分の目安</th><th>内訳</th></tr></thead><tbody>'
+  if(!rows.length)return'<div class="sec"><h3>契約本数との比較</h3><div class="notice">契約本数が未設定です。設定すると、超過・不足を自動で判定します。 <button class="primary" data-act="editQuota" data-id="'+cid+'">契約本数を設定</button></div></div>';
+  const live=m===ymOf(TODAY);const q=quota(c,m);
+  return'<div class="sec"><div class="sec-h"><h3>契約本数との比較'+(q.oneMonth?' <span class="chip muted">この月だけの契約本数</span>':'')+'</h3><button data-act="editQuota" data-id="'+cid+'">契約本数を変更</button></div><div class="scroll"><table><thead><tr><th>種類</th><th class="r">契約（月）</th><th class="r">投稿実績</th><th>判定</th><th class="r">超過分の目安</th><th>内訳</th></tr></thead><tbody>'
     +rows.map(r=>{const v=contractVerdict(r);return'<tr><td><b>'+r.label+'</b></td><td class="r num">'+r.q+'本</td><td class="r num"><b>'+(isNum(r.a)?r.a+'本':'—')+'</b></td><td><span class="chip '+v.cls+'">'+v.txt+'</span></td><td class="r num">'+(v.diff>0?'¥'+fmt(v.diff*OPTION_PRICE[r.key]):'—')+'</td><td class="hint">'+esc(r.detail)+'</td></tr>'}).join('')
     +'</tbody></table></div><p class="hint" style="margin:0">投稿実績はSNSから自動取得した本数です。同じショートを複数の媒体に投稿した場合は1本と数えます（媒体ごとの本数のうち一番多い数）。超過分の目安はオプション単価（ショート1本¥30,000／横動画1本¥50,000）で計算。制作シートで投稿日が'+mshort(m)+'の案件は'+(rows[0].sheet)+'件です。'+(live?'今月はまだ途中のため、月末までに変わります。':'')+'</p></div>';
 }
@@ -935,6 +955,7 @@ document.addEventListener('click',async e=>{
     case'openRep':S.repClient=id;S.tab='rep';try{localStorage.setItem('vh.rep',id);localStorage.setItem('vh.tab','rep')}catch(_){}render();window.scrollTo(0,0);break;
     case'payOpen':{const k=Number(t.dataset.k);S.payOpen=S.payOpen===k?null:k;render();break}
     case'payCsv':payCsv();break;
+    case'editQuota':editQuota(id,S.month);break;
     case'fetchOne':requestFetch([id]);break;
     case'fetchAll':requestFetch('all');break;
     case'edFilter':S.f.editor=t.dataset.name;S.f.scope='month';S.tab='prod';render();break;
