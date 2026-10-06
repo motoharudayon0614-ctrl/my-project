@@ -590,6 +590,7 @@ function viewRep(){
   h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(d&&d.source==='apify'?' ・ <span class="chip good">自動取得 '+dlabel((d.collectedAt||'').slice(0,10))+'</span>':'')+'</div></div>';
   if(!d){const urls=['ig','tt','yt'].filter(p=>c[p]);
     h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）から、翌月1日の朝に動画ごとの数字が自動で入ります。':'クライアントタブでアカウントURLを登録すると、毎月1日に動画ごとの数字が自動で入ります。')+'</span>'+(urls.length?'':'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
+  if(d.source!=='apify'&&['ig','tt','yt'].some(p=>c[p]))h+='<div class="notice">登録されたアカウントURLからの数字はまだ取得していません。自動取得は毎月1日の朝（前月分）です。すぐに見たいときはClaudeに「○○の数字を取得して」と依頼してください。</div>';
   const tot=(doc,mm,k)=>doc?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(doc,p,c.id,mm);return a+(x&&isNum(x[k])?x[k]:0)},0):null;
   const sumF=followersTotal(c.id,m),sumPF=followersTotal(c.id,pm);
   const sumV=tot(d,m,'views'),sumPV=tot(pd,pm,'views'),posts=tot(d,m,'posts'),pposts=tot(pd,pm,'posts');
