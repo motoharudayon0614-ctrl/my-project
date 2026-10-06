@@ -470,7 +470,7 @@ function viewCal(){
 
 function trendSvg(cid,p,m){
   const months=[...Array(6)].map((_,i)=>madd(m,i-5));
-  const rows=months.map(x=>{const d=metricsFor(cid,x);return{m:x,f:d&&d[p]?d[p].followers:null,v:d&&d[p]?d[p].views:null}});
+  const rows=months.map(x=>{const t=platMetrics(metricsFor(cid,x),p,cid,x)||{};return{m:x,f:isNum(t.followers)?t.followers:null,v:isNum(t.views)?t.views:null}});
   if(rows.filter(r=>isNum(r.f)||isNum(r.v)).length<2)return'<div class="hint" style="padding:12px 0">2ヶ月分以上入力すると推移グラフが出ます。</div>';
   const W=340,H=170,L=8,R=8,T=26,B=22,iw=W-L-R,ih=H-T-B,bw=iw/6;
   const vmax=Math.max(1,...rows.map(r=>isNum(r.v)?r.v:0));
@@ -612,7 +612,7 @@ const PDF_CSS='.pdfp{width:794px;height:1123px;background:#fff;color:#17283b;fon
  +'.pdfp .box{border:1px solid #d9e0e8;border-radius:8px;padding:10px 12px;display:grid;gap:2px}.pdfp .box.hl{background:#f1f4f8}.pdfp .box .l{font-size:11px;color:#5a6a7c}.pdfp .box .v{font-family:var(--num);font-size:26px;font-weight:600;line-height:1.15}.pdfp .box .c{font-family:var(--num);font-size:13px}.pdfp .box .p{font-size:11px;color:#5a6a7c}'
  +'.pdfp table{width:100%;border-collapse:collapse;font-size:12px}.pdfp th{background:#f1f4f8;color:#5a6a7c;font-weight:500;font-size:11px;text-align:left;padding:7px 8px}.pdfp td{padding:7px 8px;border-bottom:1px solid #d9e0e8}.pdfp td.r,.pdfp th.r{text-align:right;font-family:var(--num)}'
  +'.pdfp .up{color:#1d8656}.pdfp .down{color:#c3372d}.pdfp .flat{color:#5a6a7c}.pdfp .note{white-space:pre-wrap;background:#f1f4f8;border-radius:8px;padding:14px;font-size:13px;line-height:1.8}'
- +'.pdfp .chart svg{width:100%;height:auto;display:block}.pdfp .chart text{font-family:var(--num);font-size:10px}.pdfp .legend{display:flex;gap:14px;font-size:11px;color:#5a6a7c}.pdfp .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}'
+ +'.pdfp .chart{width:440px}.pdfp .chart svg{width:440px;height:auto;display:block}.pdfp .chart text{font-family:var(--num);font-size:10px}.pdfp .legend{display:flex;gap:14px;font-size:11px;color:#5a6a7c}.pdfp .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}'
  +'.pdfp .foot{position:absolute;left:48px;right:48px;bottom:24px;display:flex;justify-content:space-between;font-size:10px;color:#5a6a7c;border-top:1px solid #d9e0e8;padding-top:8px}';
 function pdfPages(cid,m){
   const c=cById(cid),d=metricsFor(cid,m),pm=madd(m,-1),pd=metricsFor(cid,pm);if(!c||!d)return null;
@@ -634,11 +634,14 @@ function pdfPages(cid,m){
     const ks=[box(def.fields[0][1],x.followers,y.followers,{hl:1}),isNum(gain)?box('今月の増加数',gain,gainPrev,{hl:1,signed:1}):'']
       .concat(def.fields.slice(1).filter(([k])=>isNum(x[k])).map(([k,l])=>box(l,x[k],y[k],{dp:k==='watchHours'?1:0})))
       .concat([isNum(x.vpp)?box('1本あたり再生',x.vpp,y.vpp,{hl:1}):'',isNum(x.er)?box('エンゲージメント率',x.er,y.er,{dp:2,pct:1}):'']);
-    const tv=vidsOf(d,p).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).slice(0,14);
-    pages.push('<div class="phead" style="--pc:var(--'+p+')"><i></i><b>'+def.name+'</b><span>'+esc(c.name)+' 様 ／ '+mlabel(m)+'</span></div><div class="body">'
-      +'<div class="t3">'+ks.join('')+'</div><h4>6ヶ月の推移</h4>'+trendSvg(cid,p,m)
-      +(tv.length?'<h4>今月投稿した動画（'+vidsOf(d,p).length+'本）</h4><table><thead><tr><th>動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+tv.map(v=>'<tr><td>'+esc((v.title||'(無題)').slice(0,40))+'</td><td>'+dlabel(v.date)+'</td><td class="r">'+fmt(v.views)+'</td><td class="r">'+fmt(v.likes)+'</td><td class="r">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table>':'')
-      +'</div>');
+    const all=vidsOf(d,p).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    const vtable=(rows,title)=>'<h4>'+title+'</h4><table><thead><tr><th>動画</th><th>投稿日</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th></tr></thead><tbody>'+rows.map(v=>'<tr><td>'+esc((v.title||'(無題)').slice(0,34))+'</td><td>'+dlabel(v.date)+'</td><td class="r">'+fmt(v.views)+'</td><td class="r">'+fmt(v.likes)+'</td><td class="r">'+fmt(v.comments)+'</td></tr>').join('')+'</tbody></table>';
+    // Numbers + chart on one page, the video list on its own page(s), so nothing runs past the A4 edge.
+    const head='<div class="phead" style="--pc:var(--'+p+')"><i></i><b>'+def.name+'</b><span>'+esc(c.name)+' 様 ／ '+mlabel(m)+'</span></div>';
+    pages.push(head+'<div class="body"><div class="t3">'+ks.join('')+'</div><h4>6ヶ月の推移</h4>'+trendSvg(cid,p,m)+'</div>');
+    const PER=24;
+    for(let k=0;k<all.length;k+=PER)
+      pages.push(head+'<div class="body">'+vtable(all.slice(k,k+PER),'今月投稿した動画（'+all.length+'本）'+(k?'（続き）':''))+'</div>');
   }
   return pages.map((h,i)=>h+'<div class="foot"><span>'+esc(company()||'SNS運用 月次レポート')+'</span><span>発行日 '+issued+' ・ '+(i+1)+' / '+pages.length+'</span></div>');
 }
