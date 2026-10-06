@@ -195,7 +195,7 @@ def monthly(profile, vids, month, extra=()):
 def call(method, path, token, body=None, timeout=90):
     req = urllib.request.Request(API + path, method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
-                                 headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+                                 headers=dict({"Content-Type": "application/json"}, **({"Authorization": "Bearer " + token} if token else {})))
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode() or "null")
 
@@ -275,9 +275,9 @@ def main():
     ap.add_argument("--month", default=prev_month(), help="target month YYYY-MM (default: last month)")
     ap.add_argument("--out", default="metrics.json")
     a = ap.parse_args()
-    token = os.environ.get("APIFY_TOKEN")
-    if not token:
-        sys.exit("APIFY_TOKEN is not set")
+    # The token may come from APIFY_TOKEN, or be injected by the environment's
+    # "API認証情報" (credential proxy) for api.apify.com, in which case it is empty here.
+    token = os.environ.get("APIFY_TOKEN", "")
     with open(a.clients, encoding="utf-8") as f:
         clients = json.load(f)
     docs, errors = collect(clients, a.month, token, log=lambda s: print(s, file=sys.stderr))

@@ -8,14 +8,15 @@ Apify で公開データ（ログイン不要）を取得し、前月分の数�
 
 1. Apify のアカウントを作り、API トークンを発行する（Settings → API & Integrations）。
 2. Claude Code のクラウド環境設定（セッション上部の環境メニュー → Edit）で
-   - 環境変数 `APIFY_TOKEN` にトークンを登録する
-   - Network access を Custom にし、Allowed domains に `api.apify.com` を追加する（既定のパッケージマネージャーの許可は残す）
+   - 「API認証情報」に api.apify.com 用のトークンを登録する（環境変数 `APIFY_TOKEN` でも可）
+   - ネットワークアクセスで `api.apify.com` に接続できるようにする（Custom にして Allowed domains に追加）
 
 ## 手順（ルーティンが実行）
 
 1. `git fetch origin claude/new-session-ynydo4 && git checkout claude/new-session-ynydo4`
-2. `APIFY_TOKEN` が設定されていて `curl -s -o /dev/null -w '%{http_code}' https://api.apify.com/v2/acts` が 401/200 を返すことを確認する。
-   だめなら何も書き込まず、どちらが足りないかを報告して終了する。
+2. `curl -s -o /dev/null -w '%{http_code}' https://api.apify.com/v2/users/me` が 200 を返すことを確認する
+   （`APIFY_TOKEN` があれば `-H "Authorization: Bearer $APIFY_TOKEN"` を付ける。API認証情報で登録した場合は付けなくても通る）。
+   000 なら接続が許可されていない、401 ならトークンが届いていない。だめなら何も書き込まず、どちらが足りないかを報告して終了する。
 3. ArtifactData `list`（collection `clients`, limit 1000）でクライアントを取得し、各ドキュメントの `id` を含めて `clients.json` に保存する。
 4. `python3 collector/collect.py clients.json --out metrics.json`（対象月は日本時間の前月が自動で入る）。
 5. `metrics.json` の `docs` ごとに、ハブの `metrics/<docId>` を ArtifactData `get` し、
