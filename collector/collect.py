@@ -36,6 +36,15 @@ ACTORS = {
 
 # ---------- account parsing ----------
 
+def first_line(text, n=80):
+    """First caption line with real content (skips lines like '・' or '◯')."""
+    for line in (text or "").splitlines():
+        t = line.strip()
+        if len(re.sub(r"[\s・◯⚪︎○●◎\-_.。、|｜#]", "", t)) >= 3:
+            return t[:n]
+    return (text or "").strip()[:n]
+
+
 def ig_user(v):
     v = (v or "").strip()
     m = re.search(r"instagram\.com/([A-Za-z0-9._]+)", v)
@@ -114,7 +123,7 @@ def norm_ig(items, user, reels=None):
             continue
         vids.append({
             "platform": "ig",
-            "title": (p.get("caption") or "").strip().split("\n")[0][:80],
+            "title": first_line(p.get("caption")),
             "url": p.get("url") or ("https://www.instagram.com/p/%s/" % p["shortCode"] if p.get("shortCode") else ""),
             "date": to_date(p.get("timestamp")),
             "views": num(p.get("videoPlayCount"), p.get("videoViewCount")),
@@ -136,7 +145,7 @@ def norm_tt(items, user):
             continue
         vids.append({
             "platform": "tt",
-            "title": (it.get("text") or "").strip().split("\n")[0][:80],
+            "title": first_line(it.get("text")),
             "url": it.get("webVideoUrl") or "",
             "date": to_date(it.get("createTimeISO") or it.get("createTime")),
             "views": num(it.get("playCount")),
