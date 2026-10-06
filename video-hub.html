@@ -209,7 +209,7 @@ const fmt=(n,dp)=>isNum(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:dp==n
 
 const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],db:null,loaded:0,
   f:{client:'',editor:'',status:'',scope:'month',hideDone:false},calClient:'',repClient:''};
-try{const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
+try{S.payBasis=localStorage.getItem('vh.pay')||'stored';const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
 
 const cById=id=>S.clients.find(c=>c.id===id);
 const cName=id=>{const c=cById(id);return c?c.name:'(削除済み)'};
@@ -414,11 +414,48 @@ function viewProd(){
   return h;
 }
 
+/* ---------- 編集者への報酬（請求金額） ---------- */
+/* Which month a finished video is paid in: its 格納日, else its 納期 (basis 'stored'), or always its 納期 (basis 'due'). */
+const payMonth=v=>S.payBasis==='due'?ymOf(v.dueDate||'0000-00'):ymOf(v.storedDate||v.dueDate||'0000-00');
+const edKey=v=>(v.editor||'').trim()||'担当未定';
+function payRows(m){
+  const done=S.videos.filter(v=>DONE.has(v.status)&&payMonth(v)===m);
+  const open=S.videos.filter(v=>!DONE.has(v.status)&&(v.dueDate||'').startsWith(m));
+  const names=[...new Set(done.concat(open).map(edKey))].sort((a,b)=>a==='担当未定'?1:b==='担当未定'?-1:a.localeCompare(b,'ja'));
+  const sum=a=>a.reduce((t,v)=>t+(isNum(v.price)?v.price:0),0);
+  return names.map(n=>{const d=done.filter(v=>edKey(v)===n),o=open.filter(v=>edKey(v)===n);
+    return{name:n,done:d,open:o,doneYen:sum(d),openYen:sum(o),noPrice:d.concat(o).filter(v=>!isNum(v.price)).length}});
+}
+function payHtml(m){
+  const rows=payRows(m);
+  const basisSel='<select id="pay-basis" data-act="payBasis" aria-label="計上の基準"><option value="stored"'+(S.payBasis!=='due'?' selected':'')+'>格納日で計上（なければ納期）</option><option value="due"'+(S.payBasis==='due'?' selected':'')+'>納期で計上</option></select>';
+  let h='<section class="sec"><div class="sec-h"><h2>'+mlabel(m)+'の報酬（請求金額）</h2><div class="filters">'+basisSel+(S.dl&&rows.length?'<button data-act="payCsv">CSVで保存</button>':'')+'</div></div>';
+  if(!rows.length)return h+'<div class="panel empty"><b>'+mlabel(m)+'に計上する案件はありません</b><span>制作管理シートの「単価」「格納日」「ステータス」から自動で集計します。</span></div></section>';
+  const T={d:0,dy:0,o:0,oy:0,np:0};rows.forEach(r=>{T.d+=r.done.length;T.dy+=r.doneYen;T.o+=r.open.length;T.oy+=r.openYen;T.np+=r.noPrice});
+  h+='<div class="tiles"><div class="tile"><span class="lbl">確定した報酬の合計</span><span class="val">¥'+fmt(T.dy)+'</span><span class="sub">'+T.d+'本（完了・格納済など）</span></div>'
+    +'<div class="tile"><span class="lbl">進行中の見込み</span><span class="val">¥'+fmt(T.oy)+'</span><span class="sub">'+T.o+'本（納期が'+mshort(m)+'で未完了）</span></div>'
+    +'<div class="tile'+(T.np?' alert':'')+'"><span class="lbl">単価が未入力</span><span class="val">'+T.np+'</span><span class="sub">'+(T.np?'シートの「単価」を入れてください':'すべて入力済み')+'</span></div></div>';
+  h+='<div class="scroll"><table><thead><tr><th>編集者</th><th class="r">確定本数</th><th class="r">請求金額（確定）</th><th class="r">進行中</th><th class="r">見込み</th><th>単価未入力</th><th></th></tr></thead><tbody>'
+    +rows.map((r,i)=>'<tr><td><b>'+esc(r.name)+'</b></td><td class="r num">'+r.done.length+'</td><td class="r num"><b>¥'+fmt(r.doneYen)+'</b></td><td class="r num">'+r.open.length+'</td><td class="r num">¥'+fmt(r.openYen)+'</td><td>'+(r.noPrice?'<span class="chip warn">'+r.noPrice+'件</span>':'<span class="hint">—</span>')+'</td><td><button class="ghost" data-act="payOpen" data-k="'+i+'">'+(S.payOpen===i?'閉じる':'明細')+'</button></td></tr>'
+      +(S.payOpen===i?'<tr><td colspan="7" style="white-space:normal;background:var(--sunk)"><table><thead><tr><th>案件名</th><th>クライアント</th><th>状態</th><th>格納日</th><th>納期</th><th class="r">単価</th></tr></thead><tbody>'
+        +r.done.concat(r.open).map(v=>'<tr><td class="wrap">'+esc(v.title)+'</td><td>'+esc(cName(v.clientId))+'</td><td>'+esc(v.status)+(DONE.has(v.status)?'':' <span class="hint">（見込み）</span>')+'</td><td class="num">'+dlabel(v.storedDate)+'</td><td class="num">'+dlabel(v.dueDate)+'</td><td class="r num">'+(isNum(v.price)?'¥'+fmt(v.price):'<span class="chip warn">未入力</span>')+'</td></tr>').join('')
+        +'</tbody></table></td></tr>':'')).join('')
+    +'<tr><td><b>合計</b></td><td class="r num">'+T.d+'</td><td class="r num"><b>¥'+fmt(T.dy)+'</b></td><td class="r num">'+T.o+'</td><td class="r num">¥'+fmt(T.oy)+'</td><td></td><td></td></tr>'
+    +'</tbody></table></div><p class="hint" style="margin:0">確定＝ステータスが納品済・クライアント確認・完了・格納済の案件。金額はシートの「単価」の数字（「3000円（指名UP）」は3,000円）。</p></section>';
+  return h;
+}
+async function payCsv(){
+  const m=S.month;const lines=[['編集者','案件名','クライアント','ステータス','区分','格納日','納期','単価']];
+  payRows(m).forEach(r=>r.done.concat(r.open).forEach(v=>lines.push([r.name,v.title,cName(v.clientId),v.status,DONE.has(v.status)?'確定':'見込み',v.storedDate||'',v.dueDate||'',isNum(v.price)?v.price:''])));
+  const csv='﻿'+lines.map(l=>l.map(x=>{x=String(x??'');return/[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x}).join(',')).join('\r\n');
+  await saveFile('編集者報酬_'+m.replace('-','年')+'月.csv',csv);
+}
+
 function viewEd(){
   const m=S.month;
   const mv=S.videos.filter(v=>(v.dueDate||'').startsWith(m));
   const names=[...new Set(mv.map(v=>(v.editor||'').trim()||'担当未定'))].sort((a,b)=>a==='担当未定'?1:b==='担当未定'?-1:a.localeCompare(b,'ja'));
-  let h='<section class="sec"><div class="sec-h"><h2>編集者別の本数（納期が'+mlabel(m)+'）</h2><span class="hint">納品済・クライアント確認・完了・格納済を「完了」として数えます</span></div>';
+  let h=payHtml(m)+'<section class="sec"><div class="sec-h"><h2>編集者別の本数（納期が'+mlabel(m)+'）</h2><span class="hint">納品済・クライアント確認・完了・格納済を「完了」として数えます</span></div>';
   if(!names.length)return h+'<div class="panel empty"><b>'+mlabel(m)+'が納期の動画はまだありません</b><span>制作管理で動画に「担当編集者」と「納期」を入れると、ここに集計されます。</span></div></section>';
   h+='<div class="legend">'+usedStatuses(mv).map(s=>'<span><i style="background:'+(ST_COLOR[s]||'var(--muted)')+'"></i>'+s+'</span>').join('')+'</div><div class="ed-grid">';
   for(const n of names){
@@ -801,8 +838,8 @@ document.addEventListener('click',async e=>{
   if(a==='ovclose'&&e.target===t){closeModal();return}
   if(t.tagName==='BUTTON')e.preventDefault();
   switch(a){
-    case'mprev':S.month=madd(S.month,-1);render();break;
-    case'mnext':S.month=madd(S.month,1);render();break;
+    case'mprev':S.month=madd(S.month,-1);S.payOpen=null;render();break;
+    case'mnext':S.month=madd(S.month,1);S.payOpen=null;render();break;
     case'mnow':S.month=ymOf(TODAY);render();break;
     case'mclose':closeModal();break;
     case'msave':if(modalSave){t.disabled=true;await modalSave();t.disabled=false}break;
@@ -815,6 +852,8 @@ document.addEventListener('click',async e=>{
     case'editClient':editClient(cById(id));break;
     case'editMetrics':editMetrics(id,S.month);break;
     case'openRep':S.repClient=id;S.tab='rep';try{localStorage.setItem('vh.rep',id);localStorage.setItem('vh.tab','rep')}catch(_){}render();window.scrollTo(0,0);break;
+    case'payOpen':{const k=Number(t.dataset.k);S.payOpen=S.payOpen===k?null:k;render();break}
+    case'payCsv':payCsv();break;
     case'edFilter':S.f.editor=t.dataset.name;S.f.scope='month';S.tab='prod';render();break;
     case'vsort':S.vsort=t.dataset.k;render();break;
     case'pdfOne':pdfOne(id);break;
@@ -832,6 +871,7 @@ document.addEventListener('change',async e=>{
   const t=e.target;const a=t.dataset&&t.dataset.act;if(!a)return;
   if(a==='filt'){S.f[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;render()}
   else if(a==='calClient'){S.calClient=t.value;render()}
+  else if(a==='payBasis'){S.payBasis=t.value;S.payOpen=null;try{localStorage.setItem('vh.pay',t.value)}catch(_){}render()}
   else if(a==='repClient'){S.repClient=t.value;try{localStorage.setItem('vh.rep',t.value)}catch(_){}render()}
   else if(a==='status'){t.dataset.s=t.value;if(await upd('videos',t.dataset.id,{status:t.value,updatedAt:new Date().toISOString()}))toast('ステータスを「'+t.value+'」にしました')}
 });
