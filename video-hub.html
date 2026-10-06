@@ -108,6 +108,13 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .ev{font-size:11px;line-height:1.35;padding:1px 5px;border-radius:4px;border-left:3px solid;background:var(--sunk);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-align:left;border-top:0;border-right:0;border-bottom:0;width:100%}
 .ev.shoot{border-color:var(--shoot)} .ev.due{border-color:var(--due)} .ev.post{border-color:var(--post)}
 .ev.done{opacity:.55;text-decoration:line-through}
+.picker{position:relative}
+.picker summary{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 12px;background:var(--surface);white-space:nowrap}
+.picker summary::-webkit-details-marker{display:none}
+.pick-list{position:absolute;right:0;top:calc(100% + 4px);z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px;min-width:220px;max-height:min(60vh,420px);overflow:auto;display:grid;gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.pick-list label{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:6px;font-size:13px;cursor:pointer}
+.pick-list label:hover{background:var(--sunk)}
+.pick-actions{display:flex;justify-content:flex-end;border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:2px}
 .key{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .key i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .agenda{display:grid;gap:4px}
@@ -215,7 +222,7 @@ const fmt=(n,dp)=>isNum(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:dp==n
 
 const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],gcal:[],db:null,loaded:0,
   f:{client:'',editor:'',status:'',scope:'month',hideDone:false},calClient:'',repClient:''};
-try{S.payBasis=localStorage.getItem('vh.pay')||'stored';const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
+try{S.payBasis=localStorage.getItem('vh.pay')||'stored';S.calClients=JSON.parse(localStorage.getItem('vh.cal')||'[]');const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
 
 const cById=id=>S.clients.find(c=>c.id===id);
 const cName=id=>{const c=cById(id);return c?c.name:'(削除済み)'};
@@ -299,7 +306,7 @@ function editVideo(v){
   },v.id?async()=>{if(await del('videos',v.id)){closeModal();toast('削除しました')}}:null);
 }
 function editShoot(s){
-  s=s||{clientId:S.calClient||(activeClients()[0]||{}).id,people:1,date:S.month===ymOf(TODAY)?TODAY:S.month+'-01'};
+  s=s||{clientId:(S.calClients||[])[0]||(activeClients()[0]||{}).id,people:1,date:S.month===ymOf(TODAY)?TODAY:S.month+'-01'};
   if(!activeClients().length){toast('先に「クライアント」タブで取引先を登録してください');return}
   const html=field({k:'clientId',label:'クライアント',type:'select',options:clientOptions(),v:s.clientId})
     +field({k:'date',label:'撮影日',type:'date',v:s.date})
@@ -494,13 +501,20 @@ function viewEd(){
 }
 
 function calEvents(){
-  const ev=[];const cf=S.calClient;
-  S.shoots.forEach(s=>{if(cf&&s.clientId!==cf)return;ev.push({d:s.date,k:'shoot',t:'撮影 '+cName(s.clientId)+(s.time?' '+s.time:''),sub:[s.place,s.people?s.people+'名':'',s.memo].filter(Boolean).join(' ・ '),id:s.id,act:'editShoot'})});
-  S.videos.forEach(v=>{if(cf&&v.clientId!==cf)return;
+  const ev=[];const sel=new Set(S.calClients||[]);const cf=sel.size?{has:id=>sel.has(id)}:null;
+  S.shoots.forEach(s=>{if(cf&&!cf.has(s.clientId))return;ev.push({d:s.date,k:'shoot',t:'撮影 '+cName(s.clientId)+(s.time?' '+s.time:''),sub:[s.place,s.people?s.people+'名':'',s.memo].filter(Boolean).join(' ・ '),id:s.id,act:'editShoot'})});
+  S.videos.forEach(v=>{if(cf&&!cf.has(v.clientId))return;
     if(v.dueDate)ev.push({d:v.dueDate,k:'due',t:'納期 '+cName(v.clientId)+'｜'+v.title,sub:(v.editor||'担当未定')+' ・ '+v.status,id:v.id,act:'editVideo',done:DONE.has(v.status),late:isLate(v)});
     if(v.postDate)ev.push({d:v.postDate,k:'post',t:'投稿 '+cName(v.clientId)+'｜'+v.title,sub:(v.platforms||[]).map(p=>PLAT[p]?PLAT[p].name:p).join('・'),pf:v.platforms,id:v.id,act:'editVideo',done:v.status==='投稿済'});
   });
   return ev;
+}
+function calPicker(){
+  const sel=new Set(S.calClients||[]);const cl=activeClients();
+  const label=sel.size?(sel.size===1?cName([...sel][0]):cName([...sel][0])+' ほか'+(sel.size-1)+'社'):'全クライアント';
+  return'<details class="picker"'+(S.calPickOpen?' open':'')+'><summary data-act="calPickToggle">'+esc(label)+' ▾</summary><div class="pick-list">'
+    +'<div class="pick-actions"><button class="ghost" data-act="calPickAll">すべて表示</button></div>'
+    +cl.map(c=>'<label><input type="checkbox" data-act="calPick" value="'+esc(c.id)+'"'+(sel.has(c.id)?' checked':'')+'>'+esc(c.name)+'</label>').join('')+'</div></details>';
 }
 function viewCal(){
   if(!activeClients().length)return needClients();
@@ -508,7 +522,7 @@ function viewCal(){
   const first=new Date(y,mo-1,1);const start=dadd(m+'-01',-first.getDay());
   const ev=calEvents();const byDay={};ev.forEach(e=>{(byDay[e.d]=byDay[e.d]||[]).push(e)});
   const order={shoot:0,due:1,post:2};Object.values(byDay).forEach(a=>a.sort((x,y)=>order[x.k]-order[y.k]));
-  let h='<section class="sec"><div class="sec-h"><h2>スケジュール</h2><div class="filters"><select id="cal-client" data-act="calClient" aria-label="クライアント">'+clientOptions('全クライアント').map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.calClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select><button data-act="addShoot">＋ 撮影予定</button><button class="primary" data-act="addVideo">＋ 動画</button></div></div>'+gcalPanel()
+  let h='<section class="sec"><div class="sec-h"><h2>スケジュール</h2><div class="filters">'+calPicker()+'<button data-act="addShoot">＋ 撮影予定</button><button class="primary" data-act="addVideo">＋ 動画</button></div></div>'+gcalPanel()
     +'<div class="key"><span><i style="background:var(--shoot)"></i>撮影</span><span><i style="background:var(--due)"></i>納期（編集締切）</span><span><i style="background:var(--post)"></i>投稿予定</span><span>取り消し線＝完了</span></div>'
     +'<div class="scroll"><div class="cal">'+'日月火水木金土'.split('').map(d=>'<div class="dow">'+d+'</div>').join('');
   for(let i=0;i<42;i++){
@@ -1000,6 +1014,7 @@ function render(){
 
 /* ---------- events ---------- */
 document.addEventListener('click',async e=>{
+  if(S.calPickOpen&&!e.target.closest('.picker')){S.calPickOpen=false;render()}
   const t=e.target.closest('[data-act],[data-tab]');if(!t)return;
   if(t.dataset.tab){S.tab=t.dataset.tab;try{localStorage.setItem('vh.tab',S.tab)}catch(_){}render();window.scrollTo(0,0);return}
   const a=t.dataset.act,id=t.dataset.id;
@@ -1023,6 +1038,8 @@ document.addEventListener('click',async e=>{
     case'payOpen':{const k=Number(t.dataset.k);S.payOpen=S.payOpen===k?null:k;render();break}
     case'payCsv':payCsv();break;
     case'editQuota':editQuota(id,S.month);break;
+    case'calPickAll':S.calClients=[];S.calPickOpen=true;try{localStorage.setItem('vh.cal','[]')}catch(_){}render();break;
+    case'calPickToggle':S.calPickOpen=!S.calPickOpen;render();break;
     case'gcalSync':syncGcal(true);break;
     case'fetchOne':requestFetch([id]);break;
     case'fetchAll':requestFetch('all');break;
@@ -1042,7 +1059,7 @@ document.addEventListener('click',async e=>{
 document.addEventListener('change',async e=>{
   const t=e.target;const a=t.dataset&&t.dataset.act;if(!a)return;
   if(a==='filt'){S.f[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;render()}
-  else if(a==='calClient'){S.calClient=t.value;render()}
+  else if(a==='calPick'){const sel=new Set(S.calClients||[]);t.checked?sel.add(t.value):sel.delete(t.value);S.calClients=[...sel];S.calPickOpen=true;try{localStorage.setItem('vh.cal',JSON.stringify(S.calClients))}catch(_){}render()}
   else if(a==='gcalType'){const cfg=gcalCfg();cfg.types=Object.assign({},cfg.types,{[t.dataset.k]:t.checked});const ms=Object.assign({},mainSettings(),{gcal:cfg});delete ms.id;if(await save('settings','main',ms))syncGcal(true)}
   else if(a==='payBasis'){S.payBasis=t.value;S.payOpen=null;try{localStorage.setItem('vh.pay',t.value)}catch(_){}render()}
   else if(a==='repClient'){S.repClient=t.value;try{localStorage.setItem('vh.rep',t.value)}catch(_){}render()}
