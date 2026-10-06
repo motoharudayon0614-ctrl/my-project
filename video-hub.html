@@ -71,7 +71,8 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .pf{display:inline-block;font-size:10px;font-weight:700;padding:0 5px;border-radius:4px;color:var(--surface);margin-right:2px}
 .pf.ig{background:var(--ig)} .pf.tt{background:var(--tt)} .pf.yt{background:var(--yt)}
 .st{font-size:12px;padding:3px 6px;border-radius:6px}
-.st[data-s="投稿済"],.st[data-s="納品済"]{color:var(--good);border-color:var(--good)}
+.st[data-s="投稿済"],.st[data-s="完了"],.st[data-s="格納済"]{color:var(--good);border-color:var(--good)}
+.st[data-s="修正依頼"]{color:var(--bad);border-color:var(--bad)}
 .st[data-s="修正中"]{color:var(--warn);border-color:var(--warn)}
 .prog{display:grid;gap:3px;min-width:120px}
 .prog .t{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
@@ -186,9 +187,11 @@ const PLAT={
   tt:{name:'TikTok',fields:[['followers','フォロワー数'],['posts','投稿本数'],['views','再生数'],['likes','いいね'],['comments','コメント'],['shares','シェア'],['saves','保存']],eng:['likes','comments','shares','saves']},
   yt:{name:'YouTube',fields:[['followers','チャンネル登録者'],['posts','投稿本数'],['views','再生回数'],['watchHours','総再生時間(時間)'],['likes','高評価'],['comments','コメント']],eng:['likes','comments']}
 };
-const STATUSES=['企画','撮影待ち','編集中','確認中','修正中','納品済','投稿済'];
-const ST_COLOR={'企画':'var(--muted)','撮影待ち':'var(--shoot)','編集中':'var(--post)','確認中':'var(--accent)','修正中':'var(--warn)','納品済':'var(--good)','投稿済':'var(--good)'};
-const DONE=new Set(['納品済','投稿済']);
+const STATUSES=['指名','制作中','質問中','回答済み','修正依頼','納品済','クライアント確認','完了','格納済','投稿済','企画','撮影待ち','編集中','確認中','修正中'];
+const ST_COLOR={'指名':'var(--muted)','制作中':'var(--post)','質問中':'var(--warn)','回答済み':'var(--post)','修正依頼':'var(--bad)','納品済':'var(--accent)','クライアント確認':'var(--shoot)','完了':'var(--good)','格納済':'var(--good)','投稿済':'var(--good)',
+  '企画':'var(--muted)','撮影待ち':'var(--shoot)','編集中':'var(--post)','確認中':'var(--accent)','修正中':'var(--warn)'};
+const DONE=new Set(['納品済','クライアント確認','完了','格納済','投稿済']);
+const usedStatuses=list=>STATUSES.filter(st=>list.some(v=>v.status===st)).concat([...new Set(list.map(v=>v.status))].filter(st=>st&&!STATUSES.includes(st)));
 const TYPES={short:'ショート',long:'YouTube(横)'};
 const PLANS={basic:{label:'BASIC',short:4,long:1},pro:{label:'PRO',short:4,long:4},custom:{label:'カスタム',short:0,long:0}};
 
@@ -270,7 +273,7 @@ function clientOptions(blankLabel){const o=activeClients().map(c=>[c.id,c.name])
 function editVideo(v){
   v=v||{status:'企画',type:'short',platforms:['ig','tt'],clientId:S.f.client||(activeClients()[0]||{}).id};
   if(!activeClients().length){toast('先に「クライアント」タブで取引先を登録してください');return}
-  const html=field({k:'title',label:'タイトル・企画名',v:v.title,full:true})
+  const html=(v.source==='sheet'?'<div class="full notice">この案件は制作管理シート（'+v.sheetRow+'行目）から取り込んでいます。案件名・ステータス・納期・編集者・投稿日はシートで変更してください。ここで変えても次の同期でシートの内容に戻ります。種類・投稿先・撮影日はここで設定できます。 <a href="'+esc(sheetUrl())+'" target="_blank" rel="noopener">シートを開く</a></div>':'')+field({k:'title',label:'タイトル・企画名',v:v.title,full:true})
     +field({k:'clientId',label:'クライアント',type:'select',options:clientOptions(),v:v.clientId})
     +field({k:'type',label:'種類',type:'select',options:Object.entries(TYPES),v:v.type})
     +field({k:'editor',label:'担当編集者',v:v.editor,list:'edlist'})+'<datalist id="edlist">'+editors().map(e=>'<option value="'+esc(e)+'">').join('')+'</datalist>'
@@ -282,7 +285,8 @@ function editVideo(v){
     +field({k:'platforms',label:'投稿先',type:'checks',options:[['ig','Instagram'],['tt','TikTok'],['yt','YouTube']],v:v.platforms})
     +field({k:'memo',label:'メモ（修正指示など）',type:'textarea',v:v.memo,rows:2});
   openModal(v.id?'動画を編集':'動画を追加',html,async()=>{
-    const d=formVals(); if(!d.title){toast('タイトルを入力してください');return}
+    let d=formVals(); if(!d.title){toast('タイトルを入力してください');return}
+    if(v.source==='sheet')d=Object.assign({},v,d,{title:v.title,clientId:v.clientId,status:v.status,editor:v.editor,dueDate:v.dueDate,postDate:v.postDate,memo:v.memo,url:v.url}),delete d.id;
     if(await save('videos',v.id,d)){closeModal();toast(v.id?'更新しました':'追加しました')}
   },v.id?async()=>{if(await del('videos',v.id)){closeModal();toast('削除しました')}}:null);
 }
@@ -389,19 +393,23 @@ function viewProd(){
   if(f.status)list=list.filter(v=>v.status===f.status);
   if(f.hideDone)list=list.filter(v=>!DONE.has(v.status));
   list.sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
-  const counts=STATUSES.map(s=>[s,list.filter(v=>v.status===s).length]);
+  const counts=usedStatuses(list).map(s=>[s,list.filter(v=>v.status===s).length]);
   let h='<section class="sec"><div class="sec-h"><h2>制作管理</h2><div class="filters">'
-    +'<button class="primary" data-act="addVideo">＋ 動画を追加</button></div></div>'
+    +'<button data-act="addVideo">＋ 手動で追加</button></div></div>'+sheetBar()
     +'<div class="filters">'
     +'<select id="f-scope" data-act="filt" data-k="scope" aria-label="期間"><option value="month"'+(f.scope==='month'?' selected':'')+'>'+mlabel(m)+'に関係する動画</option><option value="all"'+(f.scope==='all'?' selected':'')+'>すべての期間</option></select>'
     +'<select id="f-client" data-act="filt" data-k="client" aria-label="クライアント">'+clientOptions('全クライアント').map(([v,l])=>'<option value="'+esc(v)+'"'+(v===f.client?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'
     +'<select id="f-editor" data-act="filt" data-k="editor" aria-label="編集者"><option value="">全編集者</option>'+editors().map(e=>'<option'+(e===f.editor?' selected':'')+'>'+esc(e)+'</option>').join('')+'</select>'
-    +'<select id="f-status" data-act="filt" data-k="status" aria-label="ステータス"><option value="">全ステータス</option>'+STATUSES.map(s=>'<option'+(s===f.status?' selected':'')+'>'+s+'</option>').join('')+'</select>'
+    +'<select id="f-status" data-act="filt" data-k="status" aria-label="ステータス"><option value="">全ステータス</option>'+usedStatuses(S.videos).map(s=>'<option'+(s===f.status?' selected':'')+'>'+s+'</option>').join('')+'</select>'
     +'<label class="hint" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="f-hide" data-act="filt" data-k="hideDone"'+(f.hideDone?' checked':'')+'>完了を隠す</label>'
-    +'</div><div class="legend">'+counts.map(([s,n])=>'<span><i style="background:'+ST_COLOR[s]+'"></i>'+s+' <b class="num">'+n+'</b></span>').join('')+'</div>';
-  if(!list.length){h+='<div class="panel empty"><b>該当する動画はありません</b><span>「＋ 動画を追加」で企画を登録すると、納期・撮影日・投稿日がスケジュールにも反映されます。</span></div></section>';return h}
-  h+='<div class="scroll"><table><thead><tr><th>納期</th><th>タイトル</th><th>クライアント</th><th>種類</th><th>編集者</th><th>ステータス</th><th>撮影日</th><th>投稿予定</th><th>投稿先</th><th></th></tr></thead><tbody>'
-    +list.map(v=>{const late=isLate(v);return'<tr class="'+(late?'late':'')+'"><td class="num">'+dlabel(v.dueDate)+(late?' <span class="chip bad">遅れ</span>':'')+'</td><td class="wrap"><b>'+esc(v.title)+'</b>'+(v.memo?'<div class="hint">'+esc(v.memo)+'</div>':'')+'</td><td>'+esc(cName(v.clientId))+'</td><td>'+esc(TYPES[v.type]||'')+'</td><td>'+esc(v.editor||'—')+'</td><td><select class="st" data-s="'+esc(v.status)+'" data-act="status" data-id="'+v.id+'" aria-label="ステータス">'+STATUSES.map(s=>'<option'+(s===v.status?' selected':'')+'>'+s+'</option>').join('')+'</select></td><td class="num">'+dlabel(v.shootDate)+'</td><td class="num">'+dlabel(v.postDate)+'</td><td>'+pfTags(v.platforms)+'</td><td>'+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">リンク</a> ':'')+'<button class="ghost" data-act="editVideo" data-id="'+v.id+'">編集</button></td></tr>'}).join('')
+    +'</div><div class="legend">'+counts.map(([s,n])=>'<span><i style="background:'+(ST_COLOR[s]||'var(--muted)')+'"></i>'+s+' <b class="num">'+n+'</b></span>').join('')+'</div>';
+  if(!list.length){h+='<div class="panel empty"><b>該当する動画はありません</b><span>制作管理シートに案件を追加して「今すぐ同期」を押すと、ここと編集者・スケジュールに反映されます。</span></div></section>';return h}
+  h+='<div class="scroll"><table><thead><tr><th>納期</th><th>案件名</th><th>クライアント</th><th>編集者</th><th>ステータス</th><th>投稿日</th><th class="r">単価</th><th>リンク</th><th></th></tr></thead><tbody>'
+    +list.map(v=>{const late=isLate(v);const fromSheet=v.source==='sheet';
+      const links=[['素材',v.docUrl],['納品',v.url],['格納',v.storeUrl]].filter(x=>/^https?:/.test(x[1]||'')).map(x=>'<a href="'+esc(x[1])+'" target="_blank" rel="noopener">'+x[0]+'</a>').join(' ');
+      return'<tr class="'+(late?'late':'')+'"><td class="num">'+dlabel(v.dueDate)+(late?' <span class="chip bad">遅れ</span>':'')+'</td><td class="wrap"><b>'+esc(v.title)+'</b>'+(v.memo?'<div class="hint">'+esc(v.memo)+'</div>':'')+'</td><td>'+esc(cName(v.clientId))+'</td><td>'+esc(v.editor||'—')+'</td><td>'
+      +(fromSheet?'<span class="st chip" data-s="'+esc(v.status)+'" style="color:'+(ST_COLOR[v.status]||'var(--muted)')+'">'+esc(v.status)+'</span>':'<select class="st" data-s="'+esc(v.status)+'" data-act="status" data-id="'+v.id+'" aria-label="ステータス">'+STATUSES.map(s=>'<option'+(s===v.status?' selected':'')+'>'+s+'</option>').join('')+'</select>')
+      +'</td><td class="num">'+dlabel(v.postDate)+'</td><td class="r num">'+(isNum(v.price)?'¥'+fmt(v.price):'—')+'</td><td>'+(links||'<span class="hint">—</span>')+'</td><td><button class="ghost" data-act="editVideo" data-id="'+v.id+'">'+(fromSheet?'詳細':'編集')+'</button></td></tr>'}).join('')
     +'</tbody></table></div></section>';
   return h;
 }
@@ -410,9 +418,9 @@ function viewEd(){
   const m=S.month;
   const mv=S.videos.filter(v=>(v.dueDate||'').startsWith(m));
   const names=[...new Set(mv.map(v=>(v.editor||'').trim()||'担当未定'))].sort((a,b)=>a==='担当未定'?1:b==='担当未定'?-1:a.localeCompare(b,'ja'));
-  let h='<section class="sec"><div class="sec-h"><h2>編集者別の本数（納期が'+mlabel(m)+'）</h2><span class="hint">納品済＋投稿済を「完了」として数えます</span></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>編集者別の本数（納期が'+mlabel(m)+'）</h2><span class="hint">納品済・クライアント確認・完了・格納済を「完了」として数えます</span></div>';
   if(!names.length)return h+'<div class="panel empty"><b>'+mlabel(m)+'が納期の動画はまだありません</b><span>制作管理で動画に「担当編集者」と「納期」を入れると、ここに集計されます。</span></div></section>';
-  h+='<div class="legend">'+STATUSES.map(s=>'<span><i style="background:'+ST_COLOR[s]+'"></i>'+s+'</span>').join('')+'</div><div class="ed-grid">';
+  h+='<div class="legend">'+usedStatuses(mv).map(s=>'<span><i style="background:'+(ST_COLOR[s]||'var(--muted)')+'"></i>'+s+'</span>').join('')+'</div><div class="ed-grid">';
   for(const n of names){
     const vs=mv.filter(v=>((v.editor||'').trim()||'担当未定')===n);
     const done=vs.filter(v=>DONE.has(v.status)).length, late=vs.filter(isLate).length;
@@ -420,8 +428,8 @@ function viewEd(){
     const sh=vs.filter(v=>v.type!=='long').length, lo=vs.length-sh;
     h+='<div class="panel ed"><div class="top"><h3>'+esc(n)+'</h3>'+(late?'<span class="chip bad">遅れ '+late+'</span>':'')+'</div>'
       +'<div style="display:flex;gap:14px;align-items:baseline"><span class="big">'+vs.length+'</span><span class="hint">本担当 ／ 完了 <b class="num">'+done+'</b> ／ 残り <b class="num">'+(vs.length-done)+'</b></span></div>'
-      +'<div class="stack" role="img" aria-label="ステータス内訳">'+STATUSES.map(s=>{const c=vs.filter(v=>v.status===s).length;return c?'<span title="'+s+' '+c+'本" style="width:'+(c/vs.length*100)+'%;background:'+ST_COLOR[s]+'"></span>':''}).join('')+'</div>'
-      +'<div class="kv"><span>ショート</span><span>'+sh+'</span><span>YouTube(横)</span><span>'+lo+'</span>'+Object.entries(byClient).map(([k,c])=>'<span class="hint">'+esc(k)+'</span><span>'+c+'</span>').join('')+'</div>'
+      +'<div class="stack" role="img" aria-label="ステータス内訳">'+STATUSES.map(s=>{const c=vs.filter(v=>v.status===s).length;return c?'<span title="'+s+' '+c+'本" style="width:'+(c/vs.length*100)+'%;background:'+(ST_COLOR[s]||'var(--muted)')+'"></span>':''}).join('')+'</div>'
+      +'<div class="kv"><span>単価合計</span><span>¥'+fmt(vs.reduce((t,v)=>t+(isNum(v.price)?v.price:0),0))+'</span><span>うち完了分</span><span>¥'+fmt(vs.filter(v=>DONE.has(v.status)).reduce((t,v)=>t+(isNum(v.price)?v.price:0),0))+'</span>'+Object.entries(byClient).map(([k,c])=>'<span class="hint">'+esc(k)+'</span><span>'+c+'</span>').join('')+'</div>'
       +'<button class="ghost" style="justify-self:start;padding-left:0" data-act="edFilter" data-name="'+esc(n==='担当未定'?'':n)+'">一覧で見る →</button></div>';
   }
   h+='</div></section>';
@@ -590,13 +598,107 @@ function reportText(){
 
 function viewCli(){
   const all=S.clients.slice().sort((a,b)=>(b.active!==false)-(a.active!==false)||(a.name||'').localeCompare(b.name||'','ja'));
-  let h='<section class="sec"><div class="sec-h"><h2>クライアント</h2><button class="primary" data-act="addClient">＋ クライアントを追加</button></div><div class="filters"><label class="hint" for="set-company">PDFレポートの発行元</label><input id="set-company" value="'+esc(company())+'" placeholder="例：株式会社〇〇"><button data-act="saveCompany">保存</button></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>クライアント</h2><button class="primary" data-act="addClient">＋ クライアントを追加</button></div><div class="filters"><label class="hint" for="set-company">PDFレポートの発行元</label><input id="set-company" value="'+esc(company())+'" placeholder="例：株式会社〇〇"><button data-act="saveCompany">保存</button></div><div class="filters"><label class="hint" for="set-sheet">制作管理シートのURL</label><input id="set-sheet" style="min-width:min(420px,100%)" value="'+esc(mainSettings().sheet||sheetUrl())+'"><button data-act="saveSheet">保存</button></div>';
   if(!all.length)return h+'<div class="panel empty"><b>まだ登録がありません</b><span>運用中の取引先を追加してください。</span></div></section>';
   h+='<div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th class="r">月の本数</th><th>運用開始</th><th>残り期間</th><th>アカウント</th><th>状態</th><th></th></tr></thead><tbody>'
     +all.map(c=>{const q=quota(c);let rest='—';if(c.startMonth){const end=madd(c.startMonth,6);const [ey,em]=end.split('-').map(Number),[ty,tm]=ymOf(TODAY).split('-').map(Number);const left=(ey-ty)*12+(em-tm);rest=left>0?'あと'+left+'ヶ月（'+mlabel(madd(end,-1))+'まで）':'<span class="chip warn">6ヶ月経過</span>'}
       return'<tr><td><b>'+esc(c.name)+'</b></td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
     +'</tbody></table></div></section>';
   return h;
+}
+
+/* ---------- 制作管理シート (Google Sheets via the viewer's Google Drive connector) ---------- */
+const SHEET_DEFAULT='1kvk1psVIdvBdJ5Ot25_YeaY3ya4Qp1fY3YnGgP1UKAM';
+const mainSettings=()=>S.settings.find(x=>x.id==='main')||{};
+const sheetId=()=>{const v=mainSettings().sheet||SHEET_DEFAULT;const m=String(v).match(/[-\w]{25,}/);return m?m[0]:null};
+const sheetUrl=()=>'https://docs.google.com/spreadsheets/d/'+sheetId()+'/edit';
+function parseCSV(t){
+  const rows=[];let row=[],cell='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){cell+='"';i++}else q=false}else cell+=ch}
+    else if(ch==='"')q=true;else if(ch===','){row.push(cell);cell=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;row.push(cell);rows.push(row);row=[];cell=''}
+    else cell+=ch}
+  if(cell!==''||row.length){row.push(cell);rows.push(row)}
+  return rows;
+}
+function decodeB64(b){try{const bin=atob(b.replace(/\s+/g,''));const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new TextDecoder().decode(u)}catch(e){return null}}
+const sdate=s=>{s=(s||'').trim();let m=s.match(/^(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})/);if(m)return m[1]+'-'+pad(m[2])+'-'+pad(m[3]);
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return m[3]+'-'+pad(m[1])+'-'+pad(m[2]);return''};
+const normName=s=>(s||'').normalize('NFKC').replace(/\s+/g,' ').trim();
+const edName=s=>normName(String(s||'').split('|')[0]);
+const strHash=s=>{let h=5381;for(const ch of s)h=(Math.imul(h,33)^ch.codePointAt(0))>>>0;return h.toString(36)};
+const yen=s=>{const m=normName(s).replace(/,/g,'').match(/\d+/);return m?Number(m[0]):null};
+const SHEET_FIELDS=['title','clientId','status','editor','dueDate','postDate','orderDate','storedDate','price','url','docUrl','storeUrl','memo','sheetRow'];
+
+async function syncSheet(manual){
+  if(S.syncing||!S.db)return;
+  const id=sheetId();if(!id){if(manual)toast('制作管理シートのURLが正しくありません（クライアントタブで設定）');return}
+  const mcp=window.claude&&window.claude.use?await window.claude.use('mcp'):null;
+  if(!mcp){S.sheetErr='この表示ではGoogle Driveにつなげません';if(manual)toast(S.sheetErr);render();return}
+  S.syncing=true;S.sheetErr='';render();
+  try{
+    let res;
+    try{res=await mcp.callTool('Google Drive','download_file_content',{fileId:id,exportMimeType:'text/csv'},{cache:false})}
+    catch(e){
+      const c=e&&e.code;
+      S.sheetErr=c==='server_not_connected'?'Google Driveが未接続です。claude.aiの設定 → コネクタでGoogle Driveをつないでください。'
+        :c==='needs_reauth'?'Google Driveの接続が切れています。claude.aiの設定 → コネクタでつなぎ直してください。'
+        :c==='not_in_manifest'||c==='consent_required'?'このページでのGoogle Driveの利用が許可されていません。ページ右上の権限メニューから許可してください。'
+        :c==='selection_required'?'Google Driveのアカウントを選んでください。'
+        :c==='tool_error'?'シートを読めませんでした。シートのURLと、このGoogleアカウントで開けるかを確認してください。'
+        :'シートを読み込めませんでした（'+(c||'error')+'）。少し待ってから「今すぐ同期」を押してください。';
+      return;
+    }
+    let p=res&&res.payload;if(typeof p==='string'){try{p=JSON.parse(p)}catch(_){}}
+    const raw=p&&typeof p==='object'?p.content:(typeof p==='string'?p:'');
+    let text=raw&&!/案件名/.test(raw)?decodeB64(raw):raw;
+    if(!text||!/案件名/.test(text)){S.sheetErr='シートの1行目に「案件名」の列が見つかりませんでした。';return}
+    text=text.replace(/^﻿/,'');
+    const rows=parseCSV(text);const hdr=rows[0].map(normName);const col=n=>hdr.indexOf(n);
+    const C={title:col('案件名'),client:col('クライアント'),due:col('納期'),dueTalk:col('納期相談'),status:col('ステータス'),doc:col('素材/ドキュメント'),url:col('納品URL'),note:col('備考'),editor:col('編集者'),order:col('受注日'),store:col('格納URL(グーグルドライブ)'),price:col('単価'),stored:col('格納日'),post:col('投稿日')};
+    if(C.store<0)C.store=hdr.findIndex(h=>h.startsWith('格納URL'));
+    const g=(r,k)=>C[k]>=0?String(r[C[k]]||'').trim():'';
+    // clients: match by normalised name, create the missing ones
+    const byName={};S.clients.forEach(c=>{byName[normName(c.name)]=c.id});
+    const newClients={};
+    const seen={};const want={};
+    rows.slice(1).forEach((r,i)=>{
+      const title=g(r,'title'),cn=g(r,'client');if(!title&&!cn)return;
+      const nk=normName(cn)||'(クライアント未記入)';
+      if(!byName[nk]){const cid='cs_'+strHash(nk);byName[nk]=cid;newClients[cid]={name:cn||'(クライアント未記入)',plan:'custom',active:true,source:'sheet'}}
+      const key=nk+'|'+normName(title);seen[key]=(seen[key]||0)+1;
+      const vid='sh_'+strHash(key)+'_'+seen[key];
+      const memo=[g(r,'dueTalk')?'納期相談: '+g(r,'dueTalk'):'',g(r,'note')].filter(Boolean).join(' ／ ');
+      want[vid]={title:title||'(案件名なし)',clientId:byName[nk],status:g(r,'status')||'指名',editor:edName(g(r,'editor')),dueDate:sdate(g(r,'due')),postDate:sdate(g(r,'post')),
+        orderDate:sdate(g(r,'order')),storedDate:sdate(g(r,'stored')),price:yen(g(r,'price')),url:g(r,'url'),docUrl:g(r,'doc'),storeUrl:g(r,'store'),memo:memo,sheetRow:i+2};
+    });
+    const cur={};S.videos.forEach(v=>{cur[v.id]=v});
+    const writes=[];
+    for(const [cid,c] of Object.entries(newClients))writes.push(()=>S.db.collection('clients').doc(cid).set(Object.assign({updatedAt:new Date().toISOString()},c)));
+    for(const [vid,w] of Object.entries(want)){
+      const old=cur[vid];
+      if(old&&SHEET_FIELDS.every(k=>(old[k]??null)===(w[k]??null)))continue;
+      const doc=Object.assign({type:old&&old.type||'short',platforms:old&&old.platforms||[],shootDate:old&&old.shootDate||''},w,{source:'sheet',updatedAt:new Date().toISOString()});
+      writes.push(()=>S.db.collection('videos').doc(vid).set(doc));
+    }
+    for(const v of S.videos)if(v.source==='sheet'&&!want[v.id])writes.push(()=>S.db.collection('videos').doc(v.id).delete());
+    let n=0;
+    for(const w of writes){await w();n++;if(n%20===0)toast('スプレッドシートを同期中… '+n+' / '+writes.length)}
+    const ms=Object.assign({},mainSettings());delete ms.id;
+    await S.db.collection('settings').doc('main').set(Object.assign(ms,{sheetSyncedAt:new Date().toISOString(),sheetRows:Object.keys(want).length}));
+    if(manual||writes.length)toast(writes.length?'スプレッドシートから'+writes.length+'件を更新しました':'スプレッドシートと同じ内容です');
+  }catch(e){
+    S.sheetErr=e&&e.code==='invalid_argument'?'このページのデータを書き換える権限がないため、同期できません。':'同期の途中で止まりました。「今すぐ同期」でもう一度試してください。';
+  }finally{S.syncing=false;render()}
+}
+function sheetBar(){
+  const ms=mainSettings();const at=ms.sheetSyncedAt;
+  return'<div class="alert-row" style="border-left:4px solid var(--good)"><b>制作管理シートと連携</b><span class="hint">'
+    +(S.syncing?'同期しています…':at?'最終同期 '+dlabel(at.slice(0,10))+' '+new Date(at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+'（'+fmt(ms.sheetRows)+'件）':'まだ同期していません')
+    +'</span>'+(S.sheetErr?'<span class="chip bad" style="white-space:normal">'+esc(S.sheetErr)+'</span>':'')
+    +'<span style="margin-left:auto;display:flex;gap:8px"><a class="btn" href="'+esc(sheetUrl())+'" target="_blank" rel="noopener">シートを開く</a><button class="primary" data-act="syncSheet"'+(S.syncing?' disabled':'')+'>今すぐ同期</button></span></div>'
+    +'<p class="hint" style="margin:0">案件名・ステータス・納期・編集者・投稿日などはスプレッドシートが元データです。変更はシートで行い、ここでは「今すぐ同期」で反映します（このページを開いたときにも自動で同期します）。</p>';
 }
 
 /* ---------- top videos (per-video data in a metrics doc: videos:[{platform,title,url,date,views,likes,comments}]) ---------- */
@@ -717,7 +819,9 @@ document.addEventListener('click',async e=>{
     case'vsort':S.vsort=t.dataset.k;render();break;
     case'pdfOne':pdfOne(id);break;
     case'pdfAll':pdfAll();break;
-    case'saveCompany':{const v=document.getElementById('set-company').value.trim();if(await save('settings','main',{company:v}))toast('保存しました');break}
+    case'saveCompany':{const v=document.getElementById('set-company').value.trim();const ms=Object.assign({},mainSettings(),{company:v});delete ms.id;if(await save('settings','main',ms))toast('保存しました');break}
+    case'saveSheet':{const v=document.getElementById('set-sheet').value.trim();if(!/[-\w]{25,}/.test(v)){toast('スプレッドシートのURLを貼り付けてください');break}const ms=Object.assign({},mainSettings(),{sheet:v});delete ms.id;if(await save('settings','main',ms)){toast('保存しました。同期します');syncSheet(true)}break}
+    case'syncSheet':syncSheet(true);break;
     case'copyRep':{const txt=reportText();if(!txt){toast('先に数値を入力してください');break}
       try{await navigator.clipboard.writeText(txt);toast('LINE・メールに貼れる報告文をコピーしました')}
       catch(_){openModal('報告文',field({k:'txt',label:'全選択してコピーしてください',type:'textarea',v:txt,rows:14}),async()=>closeModal());const ta=document.getElementById('f_txt');ta.focus();ta.select()}
@@ -739,8 +843,9 @@ render();
   const db=window.claude&&window.claude.use?await window.claude.use('db'):null;
   if(!db){S.dbState='none';render();return}
   S.db=db;
-  const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
+  const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++;if(S.loaded===5)autoSync()}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
   sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');
+  function autoSync(){const at=mainSettings().sheetSyncedAt;if(!at||Date.now()-new Date(at).getTime()>10*60*1000)syncSheet(false)}
   window.claude.use('downloads').then(d=>{S.dl=d;if(!document.querySelector('.ov'))render()});
 })();
 })();
