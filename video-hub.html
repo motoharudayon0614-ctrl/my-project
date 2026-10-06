@@ -7,7 +7,7 @@
   --bg:#f3f5f8; --surface:#ffffff; --sunk:#eaeef3; --ink:#17283b; --muted:#5a6a7c; --line:#d9e0e8;
   --accent:#22405f; --accent-ink:#ffffff; --basic:#c96f22; --pro:#d0312a;
   --good:#1d8656; --warn:#a87400; --bad:#c3372d;
-  --ig:#c13584; --tt:#0e8f8f; --yt:#d92323; --shoot:#6a4fc9; --due:#c96f22; --post:#1f72bd;
+  --ig:#c13584; --tt:#0e8f8f; --yt:#d92323; --yts:#ef5350; --ytl:#9b1c1c; --shoot:#6a4fc9; --due:#c96f22; --post:#1f72bd;
   --font:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
   --num:"Barlow Semi Condensed","Zen Kaku Gothic New",system-ui,sans-serif;
   --r:10px;
@@ -16,12 +16,12 @@
   --bg:#0f1620; --surface:#17212d; --sunk:#121a24; --ink:#e5ecf4; --muted:#97a6b7; --line:#2a3746;
   --accent:#8db4dc; --accent-ink:#0f1620; --basic:#e8954f; --pro:#ef5d55;
   --good:#45c08a; --warn:#e2b23a; --bad:#f06c61;
-  --ig:#e46cb4; --tt:#3ccaca; --yt:#ff6060; --shoot:#a690f2; --due:#e8954f; --post:#5eaaee; color-scheme:dark}}
+  --ig:#e46cb4; --tt:#3ccaca; --yt:#ff6060; --yts:#ff6b6b; --ytl:#ffb4a8; --shoot:#a690f2; --due:#e8954f; --post:#5eaaee; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1620; --surface:#17212d; --sunk:#121a24; --ink:#e5ecf4; --muted:#97a6b7; --line:#2a3746;
   --accent:#8db4dc; --accent-ink:#0f1620; --basic:#e8954f; --pro:#ef5d55;
   --good:#45c08a; --warn:#e2b23a; --bad:#f06c61;
-  --ig:#e46cb4; --tt:#3ccaca; --yt:#ff6060; --shoot:#a690f2; --due:#e8954f; --post:#5eaaee; color-scheme:dark}
+  --ig:#e46cb4; --tt:#3ccaca; --yt:#ff6060; --yts:#ff6b6b; --ytl:#ffb4a8; --shoot:#a690f2; --due:#e8954f; --post:#5eaaee; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.6}
 .num{font-family:var(--num);font-variant-numeric:tabular-nums}
@@ -69,7 +69,7 @@ tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .chip.basic{color:var(--basic)} .chip.pro{color:var(--pro)} .chip.custom{color:var(--muted)}
 .chip.bad{color:var(--bad)} .chip.warn{color:var(--warn)} .chip.good{color:var(--good)} .chip.muted{color:var(--muted)}
 .pf{display:inline-block;font-size:10px;font-weight:700;padding:0 5px;border-radius:4px;color:var(--surface);margin-right:2px}
-.pf.ig{background:var(--ig)} .pf.tt{background:var(--tt)} .pf.yt{background:var(--yt)}
+.pf.ig{background:var(--ig)} .pf.tt{background:var(--tt)} .pf.yt{background:var(--yt)} .pf.yts{background:var(--yts)} .pf.ytl{background:var(--ytl)}
 .st{font-size:12px;padding:3px 6px;border-radius:6px}
 .st[data-s="投稿済"],.st[data-s="完了"],.st[data-s="格納済"]{color:var(--good);border-color:var(--good)}
 .st[data-s="修正依頼"]{color:var(--bad);border-color:var(--bad)}
@@ -187,6 +187,11 @@ const PLAT={
   tt:{name:'TikTok',fields:[['followers','フォロワー数'],['posts','投稿本数'],['views','再生数'],['likes','いいね'],['comments','コメント'],['shares','シェア'],['saves','保存']],eng:['likes','comments','shares','saves']},
   yt:{name:'YouTube',fields:[['followers','チャンネル登録者'],['posts','投稿本数'],['views','再生回数'],['watchHours','総再生時間(時間)'],['likes','高評価'],['comments','コメント']],eng:['likes','comments']}
 };
+const RP={ig:PLAT.ig,tt:PLAT.tt,yt:PLAT.yt,
+  yts:{name:'YouTube ショート',base:'yt',kind:'short',fields:[['followers','チャンネル登録者（共通）']].concat(PLAT.yt.fields.slice(1).filter(f=>f[0]!=='watchHours')),eng:PLAT.yt.eng},
+  ytl:{name:'YouTube 横動画',base:'yt',kind:'long',fields:[['followers','チャンネル登録者（共通）']].concat(PLAT.yt.fields.slice(1)),eng:PLAT.yt.eng}};
+const baseOf=p=>RP[p]&&RP[p].base||p;
+const rkey=v=>v.platform==='yt'?((v.kind||'long')==='short'?'yts':'ytl'):v.platform;
 const STATUSES=['指名','制作中','質問中','回答済み','修正依頼','納品済','クライアント確認','完了','格納済','投稿済','企画','撮影待ち','編集中','確認中','修正中'];
 const ST_COLOR={'指名':'var(--muted)','制作中':'var(--post)','質問中':'var(--warn)','回答済み':'var(--post)','修正依頼':'var(--bad)','納品済':'var(--accent)','クライアント確認':'var(--shoot)','完了':'var(--good)','格納済':'var(--good)','投稿済':'var(--good)',
   '企画':'var(--muted)','撮影待ち':'var(--shoot)','編集中':'var(--post)','確認中':'var(--accent)','修正中':'var(--warn)'};
@@ -220,7 +225,7 @@ const metricsFor=(cid,m)=>S.metrics.find(x=>x.clientId===cid&&x.month===m);
 const editors=()=>[...new Set(S.videos.map(v=>(v.editor||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
 const postedCount=(cid,m,p)=>S.videos.filter(v=>v.clientId===cid&&(v.postDate||'').startsWith(m)&&(v.platforms||[]).includes(p)).length;
 const planChip=c=>{const p=c.plan||'custom';return'<span class="chip '+esc(p)+'">'+esc((PLANS[p]||PLANS.custom).label)+'</span>'};
-const pfTags=ps=>(ps||[]).map(p=>'<span class="pf '+p+'">'+({ig:'IG',tt:'TT',yt:'YT'}[p]||p)+'</span>').join('');
+const pfTags=ps=>(ps||[]).map(p=>'<span class="pf '+p+'">'+({ig:'IG',tt:'TT',yt:'YT',yts:'YTショート',ytl:'YT横'}[p]||p)+'</span>').join('');
 
 function deltaHtml(cur,prev,opts){
   opts=opts||{};
@@ -524,40 +529,44 @@ function trendSvg(cid,p,m){
   const vmax=Math.max(1,...rows.map(r=>isNum(r.v)?r.v:0));
   const fs=rows.filter(r=>isNum(r.f)).map(r=>r.f);let fmin=Math.min(...fs),fmax=Math.max(...fs);if(fmin===fmax){fmin-=1;fmax+=1}const padF=(fmax-fmin)*.15;fmin-=padF;fmax+=padF;
   const col='var(--'+p+')';
-  let s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+PLAT[p].name+'の6ヶ月推移">';
+  let s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+RP[p].name+'の6ヶ月推移">';
   for(let g=0;g<=2;g++){const y=T+ih*g/2;s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--line)" stroke-width="1"/>'}
   rows.forEach((r,i)=>{const x=L+bw*i;if(isNum(r.v)){const bh=r.v/vmax*ih;s+='<rect x="'+(x+bw*.22)+'" y="'+(T+ih-bh)+'" width="'+(bw*.56)+'" height="'+bh+'" rx="2" style="fill:'+col+';opacity:.22"/>'}s+='<text x="'+(x+bw/2)+'" y="'+(H-6)+'" text-anchor="middle" style="fill:var(--muted)">'+mshort(r.m)+'</text>'});
   const pts=rows.map((r,i)=>isNum(r.f)?[L+bw*i+bw/2,T+ih-(r.f-fmin)/(fmax-fmin)*ih,r.f]:null).filter(Boolean);
   if(pts.length>1)s+='<polyline points="'+pts.map(q=>q[0].toFixed(1)+','+q[1].toFixed(1)).join(' ')+'" style="fill:none;stroke:'+col+'" stroke-width="2.2" stroke-linejoin="round"/>';
   pts.forEach((q,i)=>{const last=i===pts.length-1;s+='<circle cx="'+q[0]+'" cy="'+q[1]+'" r="'+(last?4.5:2.5)+'" style="fill:'+(last?col:'var(--surface)')+';stroke:'+col+'" stroke-width="1.6"/>';if(last)s+='<text x="'+Math.min(q[0],W-R-2)+'" y="'+(q[1]-9)+'" text-anchor="end" style="fill:var(--ink);font-weight:600;font-size:11px">'+fmt(q[2])+'</text>'});
   s+='</svg>';
-  return'<div class="chart">'+s+'<div class="legend"><span><i style="background:'+col+'"></i>'+(p==='yt'?'登録者':'フォロワー')+'（線）</span><span><i style="background:'+col+';opacity:.3"></i>再生数（棒）</span></div></div>';
+  return'<div class="chart">'+s+'<div class="legend"><span><i style="background:'+col+'"></i>'+(baseOf(p)==='yt'?'登録者':'フォロワー')+'（線）</span><span><i style="background:'+col+';opacity:.3"></i>再生数（棒）</span></div></div>';
 }
-const vidsOf=(d,p)=>(d&&d.videos||[]).filter(v=>v.platform===p);
-const hasPlat=(d,p)=>!!d&&((d[p]&&Object.keys(d[p]).length>0)||vidsOf(d,p).length>0);
+const vidsOf=(d,p)=>(d&&d.videos||[]).filter(v=>RP[p]&&RP[p].kind?rkey(v)===p:v.platform===p);
+const hasPlat=(d,p)=>!!d&&(RP[p]&&RP[p].kind?vidsOf(d,p).length>0:((d[p]&&Object.keys(d[p]).length>0)||vidsOf(d,p).length>0));
+/* Sections a report shows: Instagram, TikTok, then YouTube split into Shorts / long-form when the videos say which is which. */
+function reportPlats(d){const out=['ig','tt'].filter(p=>hasPlat(d,p));
+  if(vidsOf(d,'yt').length)out.push(...['yts','ytl'].filter(p=>hasPlat(d,p)));else if(hasPlat(d,'yt'))out.push('yt');
+  return out}
 function platMetrics(d,p,cid,m){
-  if(!hasPlat(d,p))return null;const x=Object.assign({},d[p]||{});const vs=vidsOf(d,p);
+  if(!hasPlat(d,p))return null;const blk=d[baseOf(p)]||{};const x=RP[p].kind?{followers:blk.followers}:Object.assign({},blk);if(p==='ytl'&&isNum(blk.watchHours))x.watchHours=blk.watchHours;const vs=vidsOf(d,p);
   if(vs.length){x.posts=vs.length;for(const k of ['views','likes','comments','shares','saves']){const a=vs.filter(v=>isNum(v[k]));if(a.length)x[k]=a.reduce((t,v)=>t+v[k],0)}}
   else if(!isNum(x.posts)){const c=postedCount(cid,m,p);if(c)x.posts=c}
   if(isNum(x.views)&&isNum(x.posts)&&x.posts>0){x.vpp=x.views/x.posts}
   if(isNum(x.likes)&&isNum(x.posts)&&x.posts>0){x.lpp=x.likes/x.posts}
-  const eng=PLAT[p].eng.reduce((a,k)=>a+(isNum(x[k])?x[k]:0),0);
-  if(isNum(x.views)&&x.views>0&&PLAT[p].eng.some(k=>isNum(x[k])))x.er=eng/x.views*100;
+  const eng=RP[p].eng.reduce((a,k)=>a+(isNum(x[k])?x[k]:0),0);
+  if(isNum(x.views)&&x.views>0&&RP[p].eng.some(k=>isNum(x[k])))x.er=eng/x.views*100;
   return x;
 }
-const vEr=(v,p)=>isNum(v.views)&&v.views>0?PLAT[p].eng.reduce((a,k)=>a+(isNum(v[k])?v[k]:0),0)/v.views*100:null;
+const vEr=(v,p)=>isNum(v.views)&&v.views>0?RP[p].eng.reduce((a,k)=>a+(isNum(v[k])?v[k]:0),0)/v.views*100:null;
 /* Plain-language findings for the month, computed from the per-video data. */
 function analysis(cid,m){
   const d=metricsFor(cid,m),pd=metricsFor(cid,madd(m,-1)),c=cById(cid);if(!d)return[];
   const out=[];const q=c?quota(c):null;
-  for(const p of Object.keys(PLAT)){
+  for(const p of reportPlats(d)){
     if(!hasPlat(d,p))continue;const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,madd(m,-1))||{};const vs=vidsOf(d,p);
-    let t=PLAT[p].name+'は'+fmt(x.posts||0)+'本投稿'+(isNum(y.posts)?'（前月'+fmt(y.posts)+'本）':'');
+    let t=RP[p].name+'は'+fmt(x.posts||0)+'本投稿'+(isNum(y.posts)?'（前月'+fmt(y.posts)+'本）':'');
     if(isNum(x.vpp))t+='。1本あたり再生は'+fmt(x.vpp)+'回'+(isNum(y.vpp)&&y.vpp>0?'で、前月より'+(x.vpp>=y.vpp?fmt((x.vpp/y.vpp-1)*100,0)+'%多い':fmt((1-x.vpp/y.vpp)*100,0)+'%少ない'):'');
-    if(isNum(x.followers)&&isNum(y.followers))t+='。'+(p==='yt'?'登録者':'フォロワー')+'は'+(x.followers>=y.followers?'+':'')+fmt(x.followers-y.followers)+'人';
+    if(isNum(x.followers)&&isNum(y.followers)&&p!=='yts')t+='。'+(baseOf(p)==='yt'?'チャンネル登録者':'フォロワー')+'は'+(x.followers>=y.followers?'+':'')+fmt(x.followers-y.followers)+'人';
     out.push(t+'。');
     const best=vs.filter(v=>isNum(v.views)).sort((a,b)=>b.views-a.views)[0];
-    if(best&&vs.length>1&&isNum(x.vpp)&&x.vpp>0)out.push(PLAT[p].name+'で最も再生されたのは「'+(best.title||'無題').slice(0,30)+'」（'+fmt(best.views)+'回、平均の'+fmt(best.views/x.vpp,1)+'倍）。');
+    if(best&&vs.length>1&&isNum(x.vpp)&&x.vpp>0)out.push(RP[p].name+'で最も再生されたのは「'+(best.title||'無題').slice(0,30)+'」（'+fmt(best.views)+'回、平均の'+fmt(best.views/x.vpp,1)+'倍）。');
   }
   if(q){const sp=['ig','tt'].map(p=>vidsOf(d,p).length).reduce((a,b)=>Math.max(a,b),0);const lp=vidsOf(d,'yt').filter(v=>v.kind!=='short').length;
     if(sp&&q.short&&sp<q.short)out.push('ショート動画の投稿が契約本数（月'+q.short+'本）に対して'+sp+'本です。');
@@ -566,25 +575,26 @@ function analysis(cid,m){
 }
 function videoTableHtml(cid,m){
   const d=metricsFor(cid,m),pd=metricsFor(cid,madd(m,-1));const vs=(d&&d.videos||[]).slice();if(!vs.length)return'';
-  const prevAvg={};for(const p of Object.keys(PLAT)){const y=platMetrics(pd,p,cid,madd(m,-1));if(y&&isNum(y.vpp))prevAvg[p]=y.vpp}
+  const prevAvg={};for(const p of ['ig','tt','yts','ytl']){const y=platMetrics(pd,p,cid,madd(m,-1));if(y&&isNum(y.vpp))prevAvg[p]=y.vpp}
   const key=S.vsort||'date';vs.sort((a,b)=>key==='views'?(b.views||0)-(a.views||0):(b.date||'').localeCompare(a.date||''));
-  const best={};vs.forEach(v=>{if(isNum(v.views)&&(!best[v.platform]||v.views>best[v.platform].views))best[v.platform]=v});
+  const best={};vs.forEach(v=>{const k=rkey(v);if(isNum(v.views)&&(!best[k]||v.views>best[k].views))best[k]=v});
   return'<div class="sec"><div class="sec-h"><h3>動画ごとの数字（'+vs.length+'本）</h3><div class="filters"><span class="hint">並び順</span><button class="'+(key==='date'?'primary':'')+'" data-act="vsort" data-k="date">投稿日</button><button class="'+(key==='views'?'primary':'')+'" data-act="vsort" data-k="views">再生数</button></div></div>'
     +'<div class="scroll"><table><thead><tr><th>媒体</th><th>投稿日</th><th>動画</th><th class="r">再生</th><th class="r">いいね</th><th class="r">コメント</th><th class="r">シェア</th><th class="r">保存</th><th class="r">ER</th><th class="r">前月平均比</th></tr></thead><tbody>'
-    +vs.map(v=>{const p=v.platform;const pa=prevAvg[p];const r=isNum(v.views)&&pa?(v.views/pa-1)*100:null;const er=vEr(v,p);
-      return'<tr><td>'+pfTags([p])+(v.kind==='short'?'<span class="hint">ショート</span>':'')+'</td><td class="num">'+dlabel(v.date)+'</td><td class="wrap">'+(best[p]===v&&vs.filter(w=>w.platform===p).length>1?'<span class="chip good">最多</span> ':'')+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="r num"><b>'+fmt(v.views)+'</b></td><td class="r num">'+fmt(v.likes)+'</td><td class="r num">'+fmt(v.comments)+'</td><td class="r num">'+fmt(v.shares)+'</td><td class="r num">'+fmt(v.saves)+'</td><td class="r num">'+(isNum(er)?fmt(er,1)+'%':'—')+'</td><td class="r num">'+(isNum(r)?'<span class="'+(r>=0?'up':'down')+'">'+(r>=0?'+':'')+fmt(r,0)+'%</span>':'<span class="hint">—</span>')+'</td></tr>'}).join('')
+    +vs.map(v=>{const p=rkey(v);const pa=prevAvg[p];const r=isNum(v.views)&&pa?(v.views/pa-1)*100:null;const er=vEr(v,p);
+      return'<tr><td>'+pfTags([p])+'</td><td class="num">'+dlabel(v.date)+'</td><td class="wrap">'+(best[p]===v&&vs.filter(w=>rkey(w)===p).length>1?'<span class="chip good">最多</span> ':'')+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="r num"><b>'+fmt(v.views)+'</b></td><td class="r num">'+fmt(v.likes)+'</td><td class="r num">'+fmt(v.comments)+'</td><td class="r num">'+fmt(v.shares)+'</td><td class="r num">'+fmt(v.saves)+'</td><td class="r num">'+(isNum(er)?fmt(er,1)+'%':'—')+'</td><td class="r num">'+(isNum(r)?'<span class="'+(r>=0?'up':'down')+'">'+(r>=0?'+':'')+fmt(r,0)+'%</span>':'<span class="hint">—</span>')+'</td></tr>'}).join('')
     +'</tbody></table></div><p class="hint" style="margin:0">再生・いいね等は取得日（翌月1日）時点の数字。ER＝（いいね＋コメント＋シェア・保存）÷ 再生。前月平均比＝その動画の再生数 ÷ 前月の1本あたり平均再生。</p></div>';
 }
+const CMP_COLS=[['ig','followers'],['ig','views'],['tt','followers'],['tt','views'],['yt','followers'],['yts','views'],['ytl','views']];
 function viewRep(){
   const cl=activeClients(); if(!cl.length)return needClients();
   const m=S.month,pm=madd(m,-1);
   let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の所感・補足</button><button data-act="fetchOne" data-id="'+S.repClient+'">数字を更新</button><button data-act="copyRep">報告文をコピー</button>'+(S.dl?'<button data-act="pdfOne" data-id="'+S.repClient+'">PDFを保存</button>':''):'<button data-act="fetchAll">全社の数字を更新</button>'+(S.dl?'<button class="primary" data-act="pdfAll">全クライアントのPDFを一括保存</button>':''))+'</div></div>';
   if(!S.repClient){
     h+='<p class="hint" style="margin:0">'+mlabel(m)+'の数値と、前月（'+mlabel(pm)+'）との比較です。クライアント名を押すと詳しいレポートを開きます。</p><div class="scroll"><table><thead><tr><th>クライアント</th><th>入力</th>'
-      +Object.entries(PLAT).map(([p,d])=>'<th class="r"><span class="pf '+p+'">'+p.toUpperCase()+'</span>'+(p==='yt'?'登録者':'フォロワー')+'</th><th class="r">'+'再生数'+'</th>').join('')+'<th class="r">投稿本数</th></tr></thead><tbody>'
+      +CMP_COLS.map(([p,k])=>'<th class="r">'+pfTags([p])+(k==='followers'?(p==='yt'?'登録者':'フォロワー'):'再生数')+'</th>').join('')+'<th class="r">投稿本数</th></tr></thead><tbody>'
       +cl.map(c=>{const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
         return'<tr><td><button class="ghost" style="padding:0;font-weight:700" data-act="openRep" data-id="'+c.id+'">'+esc(c.name)+'</button></td><td>'+(d?'<span class="chip good">済</span>':'<span class="chip warn">未取得</span>')+'</td>'
-        +Object.keys(PLAT).map(p=>{const a=platMetrics(d,p,c.id,m)||{},b=platMetrics(pd,p,c.id,pm)||{};return'<td class="r num">'+fmt(a.followers)+'<div style="font-size:11px">'+(isNum(a.followers)?deltaHtml(a.followers,b.followers):'')+'</div></td><td class="r num">'+fmt(a.views)+'<div style="font-size:11px">'+(isNum(a.views)?deltaHtml(a.views,b.views):'')+'</div></td>'}).join('')+'<td class="r num">'+fmt(Object.keys(PLAT).reduce((t,p)=>{const x=platMetrics(d,p,c.id,m);return t+(x&&isNum(x.posts)?x.posts:0)},0)||null)+'</td></tr>'}).join('')
+        +CMP_COLS.map(([p,k])=>{const a=platMetrics(d,p,c.id,m)||{},b=platMetrics(pd,p,c.id,pm)||{};return'<td class="r num">'+fmt(a[k])+'<div style="font-size:11px">'+(isNum(a[k])?deltaHtml(a[k],b[k]):'')+'</div></td>'}).join('')+'<td class="r num">'+fmt(Object.keys(PLAT).reduce((t,p)=>{const x=platMetrics(d,p,c.id,m);return t+(x&&isNum(x.posts)?x.posts:0)},0)||null)+'</td></tr>'}).join('')
       +'</tbody></table></div></section>';
     return h;
   }
@@ -605,10 +615,10 @@ function viewRep(){
   const an=analysis(c.id,m);
   if(an.length)h+='<div class="sec"><h3>今月のポイント（自動分析）</h3><ul class="note" style="margin:0;padding-left:28px">'+an.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul></div>';
   h+=videoTableHtml(c.id,m);
-  for(const [p,def] of Object.entries(PLAT)){
+  for(const p of reportPlats(d)){const def=RP[p];
     if(!hasPlat(d,p))continue;const x=platMetrics(d,p,c.id,m);
     const y=platMetrics(pd,p,c.id,pm)||{};
-    const pp=metricsFor(c.id,madd(pm,-1));const gainPrev=(isNum(y.followers)&&pp&&pp[p]&&isNum(pp[p].followers))?y.followers-pp[p].followers:null;
+    const pp=metricsFor(c.id,madd(pm,-1));const pb=pp&&pp[baseOf(p)];const gainPrev=(isNum(y.followers)&&pb&&isNum(pb.followers))?y.followers-pb.followers:null;
     const gain=isNum(x.followers)&&isNum(y.followers)?x.followers-y.followers:null;
     const kp=[];
     kp.push({l:def.fields[0][1],v:x.followers,pv:y.followers,key:1});
@@ -617,7 +627,7 @@ function viewRep(){
     kp.push({l:'1本あたり再生',v:x.vpp,pv:y.vpp,key:1});
     kp.push({l:'1本あたりいいね',v:x.lpp,pv:y.lpp});
     kp.push({l:'エンゲージメント率',v:x.er,pv:y.er,dp:2,pct:1});
-    h+='<div class="plat"><div class="plat-h"><span class="dot" style="background:var(--'+p+')"></span><h3>'+def.name+' の月間合計</h3>'+(c[p]?'<a class="hint" href="'+esc(c[p])+'" target="_blank" rel="noopener">'+esc(c[p])+'</a>':'')+'</div><div class="plat-body"><div class="kpis">'
+    h+='<div class="plat"><div class="plat-h"><span class="dot" style="background:var(--'+p+')"></span><h3>'+def.name+' の月間合計</h3>'+(c[baseOf(p)]?'<a class="hint" href="'+esc(c[baseOf(p)])+'" target="_blank" rel="noopener">'+esc(c[baseOf(p)])+'</a>':'')+'</div><div class="plat-body"><div class="kpis">'
       +kp.filter(k=>isNum(k.v)).map(k=>'<div class="kpi'+(k.key?' key-kpi':'')+'"><span class="lbl">'+esc(k.l)+'</span><span class="v">'+(k.signed&&k.v>0?'+':'')+fmt(k.v,k.dp)+(k.pct?'<small style="font-size:13px">%</small>':'')+'</span><span class="cmp">'+deltaHtml(k.v,k.pv,{dp:k.dp,pct:k.pct})+'</span><span class="prev">前月 '+(isNum(k.pv)?(k.signed&&k.pv>0?'+':'')+fmt(k.pv,k.dp)+(k.pct?'%':''):'—')+'</span></div>').join('')
       +'</div>'+trendSvg(c.id,p,m)+'</div></div>';
   }
@@ -630,7 +640,7 @@ function reportText(){
   if(!d)return null;
   const line=(l,v,pv,dp)=>{if(!isNum(v))return null;let s=l+'：'+fmt(v,dp);if(isNum(pv)){const df=v-pv;s+='（前月比 '+(df>=0?'+':'')+fmt(df,dp)+(pv?(' / '+(df>=0?'+':'')+fmt(df/Math.abs(pv)*100,1)+'%'):'')+'）'}return s};
   let t='【'+mlabel(m)+' SNS運用レポート】\n'+c.name+' 様\n';
-  for(const [p,def] of Object.entries(PLAT)){if(!hasPlat(d,p))continue;const x=platMetrics(d,p,c.id,m);const y=platMetrics(pd,p,c.id,pm)||{};
+  for(const p of reportPlats(d)){const def=RP[p];if(!hasPlat(d,p))continue;const x=platMetrics(d,p,c.id,m);const y=platMetrics(pd,p,c.id,pm)||{};
     t+='\n■'+def.name+'\n'+[line(def.fields[0][1],x.followers,y.followers)].concat(def.fields.slice(1).map(([k,l])=>line(l,x[k],y[k],k==='watchHours'?1:0)),[line('1本あたり再生',x.vpp,y.vpp)]).filter(Boolean).join('\n')+'\n'}
   const an=analysis(c.id,m);if(an.length)t+='\n■今月のポイント\n'+an.map(x=>'・'+x).join('\n')+'\n';
   if(d.note)t+='\n■所感・来月の施策\n'+d.note+'\n';
@@ -747,7 +757,7 @@ function topVideos(d,p,n){const vs=(d&&d.videos||[]).filter(v=>v.platform===p);r
 const company=()=>((S.settings.find(x=>x.id==='main')||{}).company||'');
 
 /* ---------- PDF report (fixed light print palette, A4 pages rendered to canvas) ---------- */
-const PDF_CSS='.pdfp{width:794px;height:1123px;background:#fff;color:#17283b;font-family:var(--font);line-height:1.6;position:relative;overflow:hidden;--ink:#17283b;--muted:#5a6a7c;--line:#d9e0e8;--surface:#fff;--sunk:#f1f4f8;--good:#1d8656;--bad:#c3372d;--ig:#c13584;--tt:#0e8f8f;--yt:#d92323;--accent:#22405f}'
+const PDF_CSS='.pdfp{width:794px;height:1123px;background:#fff;color:#17283b;font-family:var(--font);line-height:1.6;position:relative;overflow:hidden;--ink:#17283b;--muted:#5a6a7c;--line:#d9e0e8;--surface:#fff;--sunk:#f1f4f8;--good:#1d8656;--bad:#c3372d;--ig:#c13584;--tt:#0e8f8f;--yt:#d92323;--yts:#ef5350;--ytl:#9b1c1c;--accent:#22405f}'
  +'.pdfp .band{background:#22405f;color:#fff;padding:34px 48px 26px}.pdfp .band .k{font-size:12px;letter-spacing:.2em;opacity:.8}.pdfp .band .n{font-size:30px;font-weight:700;margin-top:6px}.pdfp .band .m{font-family:var(--num);font-size:22px;margin-top:2px}'
  +'.pdfp .phead{display:flex;align-items:center;gap:12px;padding:36px 48px 14px;border-bottom:3px solid var(--pc)}.pdfp .phead b{font-size:24px}.pdfp .phead span{color:#5a6a7c;font-size:13px}.pdfp .phead i{width:16px;height:16px;border-radius:4px;background:var(--pc)}'
  +'.pdfp .body{padding:24px 48px;display:grid;gap:18px}.pdfp h4{margin:0;font-size:15px;border-left:4px solid #22405f;padding-left:8px}'
@@ -764,16 +774,16 @@ function pdfPages(cid,m){
   const tot=(doc,mm,k)=>doc?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(doc,p,cid,mm);return a+(x&&isNum(x[k])?x[k]:0)},0):null;
   const V=tot(d,m,'views'),PV=tot(pd,pm,'views'),P=tot(d,m,'posts'),PP=tot(pd,pm,'posts');
   const box=(l,v,pv,o)=>{o=o||{};return'<div class="box'+(o.hl?' hl':'')+'"><span class="l">'+esc(l)+'</span><span class="v">'+(o.signed&&v>0?'+':'')+fmt(v,o.dp)+(o.pct&&isNum(v)?'%':'')+'</span><span class="c">'+deltaHtml(v,pv,{dp:o.dp,pct:o.pct})+'</span><span class="p">前月 '+(isNum(pv)?(o.signed&&pv>0?'+':'')+fmt(pv,o.dp)+(o.pct?'%':''):'—')+'</span></div>'};
-  const plats=Object.keys(PLAT).filter(p=>hasPlat(d,p));const an=analysis(cid,m);
+  const plats=reportPlats(d);const an=analysis(cid,m);
   pages.push('<div class="band"><div class="k">SNS運用 月次レポート</div><div class="n">'+esc(c.name)+' 様</div><div class="m">'+mlabel(m)+'</div></div><div class="body">'
     +'<h4>今月のサマリー</h4><div class="t4">'+box('フォロワー合計',sumF,sumPF,{hl:1})+box('総再生数',V,PV)+box('投稿本数',P,PP)+box('1本あたり再生',P?V/P:null,PP?PV/PP:null)+'</div>'
     +'<h4>媒体別の結果（前月比）</h4><table><thead><tr><th>媒体</th><th class="r">フォロワー</th><th class="r">増減</th><th class="r">再生数</th><th class="r">増減</th><th class="r">投稿</th><th class="r">1本あたり再生</th></tr></thead><tbody>'
-    +plats.map(p=>{const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};return'<tr><td><b style="color:var(--'+p+')">■</b> '+PLAT[p].name+'</td><td class="r">'+fmt(x.followers)+'</td><td class="r">'+deltaHtml(x.followers,y.followers)+'</td><td class="r">'+fmt(x.views)+'</td><td class="r">'+deltaHtml(x.views,y.views)+'</td><td class="r">'+fmt(x.posts)+'</td><td class="r">'+fmt(x.vpp)+'</td></tr>'}).join('')+'</tbody></table>'
+    +plats.map(p=>{const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};return'<tr><td><b style="color:var(--'+p+')">■</b> '+RP[p].name+'</td><td class="r">'+fmt(x.followers)+'</td><td class="r">'+deltaHtml(x.followers,y.followers)+'</td><td class="r">'+fmt(x.views)+'</td><td class="r">'+deltaHtml(x.views,y.views)+'</td><td class="r">'+fmt(x.posts)+'</td><td class="r">'+fmt(x.vpp)+'</td></tr>'}).join('')+'</tbody></table>'
     +(an.length?'<h4>今月のポイント</h4><ul class="note" style="margin:0;padding-left:28px">'+an.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':'')+(d.note?'<h4>所感・来月の施策</h4><div class="note">'+esc(d.note)+'</div>':'')+'</div>');
   for(const p of plats){
-    const def=PLAT[p],x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};
+    const def=RP[p],x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};
     const pp=metricsFor(cid,madd(pm,-1));const gain=isNum(x.followers)&&isNum(y.followers)?x.followers-y.followers:null;
-    const gainPrev=(isNum(y.followers)&&pp&&pp[p]&&isNum(pp[p].followers))?y.followers-pp[p].followers:null;
+    const pb=pp&&pp[baseOf(p)];const gainPrev=(isNum(y.followers)&&pb&&isNum(pb.followers))?y.followers-pb.followers:null;
     const ks=[box(def.fields[0][1],x.followers,y.followers,{hl:1}),isNum(gain)?box('今月の増加数',gain,gainPrev,{hl:1,signed:1}):'']
       .concat(def.fields.slice(1).filter(([k])=>isNum(x[k])).map(([k,l])=>box(l,x[k],y[k],{dp:k==='watchHours'?1:0})))
       .concat([isNum(x.vpp)?box('1本あたり再生',x.vpp,y.vpp,{hl:1}):'',isNum(x.er)?box('エンゲージメント率',x.er,y.er,{dp:2,pct:1}):'']);
