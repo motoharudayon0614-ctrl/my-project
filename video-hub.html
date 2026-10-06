@@ -213,7 +213,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const isNum=v=>typeof v==='number'&&isFinite(v);
 const fmt=(n,dp)=>isNum(n)?n.toLocaleString('ja-JP',{maximumFractionDigits:dp==null?0:dp,minimumFractionDigits:dp||0}):'—';
 
-const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],db:null,loaded:0,
+const S={tab:'dash',month:ymOf(TODAY),clients:[],videos:[],shoots:[],metrics:[],settings:[],gcal:[],db:null,loaded:0,
   f:{client:'',editor:'',status:'',scope:'month',hideDone:false},calClient:'',repClient:''};
 try{S.payBasis=localStorage.getItem('vh.pay')||'stored';const t=localStorage.getItem('vh.tab');if(t)S.tab=t;const rc=localStorage.getItem('vh.rep');if(rc)S.repClient=rc}catch(e){}
 
@@ -309,8 +309,8 @@ function editShoot(s){
     +field({k:'memo',label:'撮影内容・持ち物',type:'textarea',v:s.memo,rows:3});
   openModal(s.id?'撮影予定を編集':'撮影予定を追加',html,async()=>{
     const d=formVals(); if(!d.date){toast('撮影日を入力してください');return}
-    if(await save('shoots',s.id,d)){closeModal();toast('保存しました')}
-  },s.id?async()=>{if(await del('shoots',s.id)){closeModal();toast('削除しました')}}:null);
+    if(await save('shoots',s.id,d)){closeModal();toast('保存しました');setTimeout(()=>syncGcal(false),800)}
+  },s.id?async()=>{if(await del('shoots',s.id)){closeModal();toast('削除しました');setTimeout(()=>syncGcal(false),800)}}:null);
 }
 function editClient(c){
   c=c||{plan:'basic',active:true,startMonth:S.month};
@@ -507,7 +507,7 @@ function viewCal(){
   const first=new Date(y,mo-1,1);const start=dadd(m+'-01',-first.getDay());
   const ev=calEvents();const byDay={};ev.forEach(e=>{(byDay[e.d]=byDay[e.d]||[]).push(e)});
   const order={shoot:0,due:1,post:2};Object.values(byDay).forEach(a=>a.sort((x,y)=>order[x.k]-order[y.k]));
-  let h='<section class="sec"><div class="sec-h"><h2>スケジュール</h2><div class="filters"><select id="cal-client" data-act="calClient" aria-label="クライアント">'+clientOptions('全クライアント').map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.calClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select><button data-act="addShoot">＋ 撮影予定</button><button class="primary" data-act="addVideo">＋ 動画</button></div></div>'
+  let h='<section class="sec"><div class="sec-h"><h2>スケジュール</h2><div class="filters"><select id="cal-client" data-act="calClient" aria-label="クライアント">'+clientOptions('全クライアント').map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.calClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select><button data-act="addShoot">＋ 撮影予定</button><button class="primary" data-act="addVideo">＋ 動画</button></div></div>'+gcalPanel()
     +'<div class="key"><span><i style="background:var(--shoot)"></i>撮影</span><span><i style="background:var(--due)"></i>納期（編集締切）</span><span><i style="background:var(--post)"></i>投稿予定</span><span>取り消し線＝完了</span></div>'
     +'<div class="scroll"><div class="cal">'+'日月火水木金土'.split('').map(d=>'<div class="dow">'+d+'</div>').join('');
   for(let i=0;i<42;i++){
@@ -742,6 +742,7 @@ async function syncSheet(manual){
     for(const w of writes){await w();n++;if(n%20===0)toast('スプレッドシートを同期中… '+n+' / '+writes.length)}
     const ms=Object.assign({},mainSettings());delete ms.id;
     await S.db.collection('settings').doc('main').set(Object.assign(ms,{sheetSyncedAt:new Date().toISOString(),sheetRows:Object.keys(want).length}));
+    if(manual&&writes.length)setTimeout(()=>syncGcal(false),800);
     if(manual||writes.length)toast(writes.length?'スプレッドシートから'+writes.length+'件を更新しました':'スプレッドシートと同じ内容です');
   }catch(e){
     S.sheetErr=e&&e.code==='invalid_argument'?'このページのデータを書き換える権限がないため、同期できません。':'同期の途中で止まりました。「今すぐ同期」でもう一度試してください。';
@@ -800,6 +801,71 @@ function contractHtml(cid,m){
 }
 function contractChips(cid,m){
   return contractRows(cid,m).map(r=>{const v=contractVerdict(r);return'<div style="font-size:11px;white-space:nowrap">'+(r.key==='short'?'ショート':'横')+' '+(isNum(r.a)?r.a:'—')+'/'+r.q+' <span class="chip '+v.cls+'" style="font-size:10px">'+v.txt+'</span></div>'}).join('')||'<span class="hint">未設定</span>';
+}
+
+/* ---------- Googleカレンダー連携（オーナーのGoogle Calendarコネクタで、撮影・納期・投稿日を予定として登録） ----------
+   gcal/<key> keeps {eventId, sig, date} so later changes update or remove the same Google event. Past items are left alone. */
+const GCAL_TYPES={shoot:'撮影',due:'納期',post:'投稿日'};
+const gcalCfg=()=>Object.assign({types:{shoot:true,due:false,post:false}},mainSettings().gcal||{});
+function gcalItems(){
+  const cfg=gcalCfg(),from=dadd(TODAY,-1),out=[];const t=cfg.types||{};
+  const hm=x=>{const m=String(x||'').normalize('NFKC').match(/(\d{1,2}):(\d{2})(?:\s*[~〜\-ー–]\s*(\d{1,2}):(\d{2}))?/);return m?{s:pad(m[1])+':'+m[2],e:m[3]?pad(m[3])+':'+m[4]:null}:null};
+  if(t.shoot)S.shoots.forEach(x=>{if(!x.date||x.date<from)return;const tm=hm(x.time);
+    out.push({key:'shoot_'+x.id,date:x.date,summary:'【撮影】'+cName(x.clientId),time:tm,location:x.place||'',
+      description:['クライアント：'+cName(x.clientId),x.time?'時間：'+x.time:'',x.people?'人数：'+x.people+'名':'',x.memo?'内容：'+x.memo:'','動画管理基盤から自動登録'].filter(Boolean).join('\n')})});
+  S.videos.forEach(v=>{
+    if(t.due&&v.dueDate&&v.dueDate>=from&&!DONE.has(v.status))out.push({key:'due_'+v.id,date:v.dueDate,summary:'【納期】'+cName(v.clientId)+'｜'+v.title+(v.editor?'（'+v.editor+'）':''),
+      description:['ステータス：'+(v.status||''),v.editor?'編集者：'+v.editor:'',v.docUrl?'素材：'+v.docUrl:'','動画管理基盤から自動登録'].filter(Boolean).join('\n')});
+    if(t.post&&v.postDate&&v.postDate>=from)out.push({key:'post_'+v.id,date:v.postDate,summary:'【投稿】'+cName(v.clientId)+'｜'+v.title,
+      description:[(v.platforms||[]).length?'投稿先：'+v.platforms.map(p=>PLAT[p]?PLAT[p].name:p).join('・'):'',v.url?'納品：'+v.url:'','動画管理基盤から自動登録'].filter(Boolean).join('\n')});
+  });
+  return out;
+}
+function gcalInput(it){
+  const base={summary:it.summary,description:it.description,location:it.location||'',timeZone:'Asia/Tokyo',notificationLevel:'NONE'};
+  if(it.time){const e=it.time.e||(()=>{const [h,mi]=it.time.s.split(':').map(Number);return pad(Math.min(h+1,23))+':'+pad(mi)})();
+    return Object.assign(base,{startTime:it.date+'T'+it.time.s+':00+09:00',endTime:it.date+'T'+e+':00+09:00'})}
+  return Object.assign(base,{allDay:true,startTime:it.date+'T00:00:00+09:00',endTime:dadd(it.date,1)+'T00:00:00+09:00'});
+}
+const evIdOf=r=>{let p=r&&r.payload;if(typeof p==='string'){try{p=JSON.parse(p)}catch(_){}}return p&&(p.id||p.eventId||(p.event&&p.event.id))||null};
+async function syncGcal(manual){
+  if(S.gcalBusy||!S.db||!S.isOwner)return;const mcp=window.claude&&window.claude.use?await window.claude.use('mcp'):null;if(!mcp)return;
+  S.gcalBusy=true;S.gcalErr='';render();
+  let made=0,changed=0,removed=0;
+  const call=(tool,input)=>mcp.callTool('Google Calendar',tool,input,{cache:false});
+  try{
+    const want={};gcalItems().forEach(it=>{want[it.key]=it});
+    const have={};S.gcal.forEach(g=>{have[g.id]=g});
+    for(const [key,it] of Object.entries(want)){
+      const input=gcalInput(it);const sig=strHash(JSON.stringify(input));const g=have[key];
+      if(g&&g.sig===sig)continue;
+      let eventId=g&&g.eventId;
+      if(eventId){try{await call('update_event',Object.assign({eventId},input));changed++}catch(e){if(e&&e.code==='tool_error')eventId=null;else throw e}}
+      if(!eventId){eventId=evIdOf(await call('create_event',input));made++}
+      await S.db.collection('gcal').doc(key).set({eventId:eventId||'',sig,date:it.date});
+    }
+    for(const g of S.gcal){if(want[g.id]||(g.date&&g.date<dadd(TODAY,-1)))continue;
+      if(g.eventId){try{await call('delete_event',{eventId:g.eventId,notificationLevel:'NONE'})}catch(e){if(!(e&&e.code==='tool_error'))throw e}}
+      await S.db.collection('gcal').doc(g.id).delete();removed++}
+    const ms=Object.assign({},mainSettings());delete ms.id;ms.gcal=Object.assign(gcalCfg(),{syncedAt:new Date().toISOString()});
+    await S.db.collection('settings').doc('main').set(ms);
+    if(manual||made||changed||removed)toast('Googleカレンダーに反映しました（追加'+made+'・更新'+changed+'・削除'+removed+'）');
+  }catch(e){
+    const c=e&&e.code;
+    S.gcalErr=c==='server_not_connected'||c==='needs_reauth'?'Googleカレンダーの接続が必要です（claude.ai の設定 → コネクタ）'
+      :c==='not_in_manifest'||c==='consent_required'?'このページでのGoogleカレンダーの利用が許可されていません（ページの権限メニュー）'
+      :'Googleカレンダーへの反映が途中で止まりました（'+(c||'error')+'）。「今すぐ反映」でもう一度試してください';
+  }finally{S.gcalBusy=false;render()}
+}
+function gcalPanel(){
+  const cfg=gcalCfg();
+  if(!S.isOwner)return'<div class="alert-row"><b>Googleカレンダー連携</b><span class="hint">'+(cfg.syncedAt?'オーナーのGoogleカレンダーに反映中（最終 '+dlabel(cfg.syncedAt.slice(0,10))+'）':'オーナーが設定すると、撮影などの予定がGoogleカレンダーに自動で入ります')+'</span></div>';
+  return'<div class="alert-row" style="border-left:4px solid var(--post)"><b>Googleカレンダー連携</b>'
+    +Object.entries(GCAL_TYPES).map(([k,l])=>'<label class="hint" style="display:flex;gap:4px;align-items:center"><input type="checkbox" data-act="gcalType" data-k="'+k+'"'+(cfg.types&&cfg.types[k]?' checked':'')+'>'+l+'</label>').join('')
+    +'<span class="hint">'+(S.gcalBusy?'反映しています…':cfg.syncedAt?'最終反映 '+dlabel(cfg.syncedAt.slice(0,10))+' '+new Date(cfg.syncedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'まだ反映していません')+'</span>'
+    +(S.gcalErr?'<span class="chip bad" style="white-space:normal">'+esc(S.gcalErr)+'</span>':'')
+    +'<button class="primary" style="margin-left:auto" data-act="gcalSync"'+(S.gcalBusy?' disabled':'')+'>今すぐ反映</button></div>'
+    +'<p class="hint" style="margin:0">チェックした種類の予定（昨日以降のもの）を、あなたのGoogleカレンダーに自動で登録・更新・削除します。撮影予定の保存やスプレッドシートの同期のたびに反映されます。</p>';
 }
 
 /* ---------- top videos (per-video data in a metrics doc: videos:[{platform,title,url,date,views,likes,comments}]) ---------- */
@@ -927,7 +993,7 @@ function render(){
   document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===S.tab)));
   const main=document.getElementById('main');
   if(S.dbState==='none'){main.innerHTML='<div class="notice">この画面ではデータの保存・共有が使えません。claude.ai にサインインした状態で開くと、チーム全員で同じデータを見られます。</div>';return}
-  if(S.loaded<5){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
+  if(S.loaded<6){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
   main.innerHTML=(VIEWS[S.tab]||viewDash)();
 }
 
@@ -956,6 +1022,7 @@ document.addEventListener('click',async e=>{
     case'payOpen':{const k=Number(t.dataset.k);S.payOpen=S.payOpen===k?null:k;render();break}
     case'payCsv':payCsv();break;
     case'editQuota':editQuota(id,S.month);break;
+    case'gcalSync':syncGcal(true);break;
     case'fetchOne':requestFetch([id]);break;
     case'fetchAll':requestFetch('all');break;
     case'edFilter':S.f.editor=t.dataset.name;S.f.scope='month';S.tab='prod';render();break;
@@ -975,6 +1042,7 @@ document.addEventListener('change',async e=>{
   const t=e.target;const a=t.dataset&&t.dataset.act;if(!a)return;
   if(a==='filt'){S.f[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;render()}
   else if(a==='calClient'){S.calClient=t.value;render()}
+  else if(a==='gcalType'){const cfg=gcalCfg();cfg.types=Object.assign({},cfg.types,{[t.dataset.k]:t.checked});const ms=Object.assign({},mainSettings(),{gcal:cfg});delete ms.id;if(await save('settings','main',ms))syncGcal(true)}
   else if(a==='payBasis'){S.payBasis=t.value;S.payOpen=null;try{localStorage.setItem('vh.pay',t.value)}catch(_){}render()}
   else if(a==='repClient'){S.repClient=t.value;try{localStorage.setItem('vh.rep',t.value)}catch(_){}render()}
   else if(a==='status'){t.dataset.s=t.value;if(await upd('videos',t.dataset.id,{status:t.value,updatedAt:new Date().toISOString()}))toast('ステータスを「'+t.value+'」にしました')}
@@ -987,9 +1055,10 @@ render();
   const db=window.claude&&window.claude.use?await window.claude.use('db'):null;
   if(!db){S.dbState='none';render();return}
   S.db=db;
-  const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++;if(S.loaded===5)autoSync()}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
-  sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');
-  function autoSync(){const at=mainSettings().sheetSyncedAt;if(!at||Date.now()-new Date(at).getTime()>10*60*1000)syncSheet(false)}
+  const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++;if(S.loaded===6)autoSync()}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
+  sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');sub('gcal','gcal');
+  async function autoSync(){const at=mainSettings().sheetSyncedAt;if(!at||Date.now()-new Date(at).getTime()>10*60*1000)await syncSheet(false);syncGcal(false)}
+  window.claude.use('user').then(u=>{S.isOwner=!!(u&&u.isOwner&&u.isOwner());render()});
   window.claude.use('downloads').then(d=>{S.dl=d;if(!document.querySelector('.ov'))render()});
 })();
 })();
