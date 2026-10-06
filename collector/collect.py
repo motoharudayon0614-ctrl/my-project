@@ -317,6 +317,7 @@ def main():
     ap.add_argument("--month", default=prev_month(),
                     help="target month(s) YYYY-MM, comma separated; 'now' = this month and last month (default: last month)")
     ap.add_argument("--out", default="metrics.json")
+    ap.add_argument("--only", default="all", help="comma separated client ids to fetch (default: all)")
     a = ap.parse_args()
     months = [prev_month(), this_month()] if a.month == "now" else [m.strip() for m in a.month.split(",") if m.strip()]
     # The token may come from APIFY_TOKEN, or be injected by the environment's
@@ -324,6 +325,9 @@ def main():
     token = os.environ.get("APIFY_TOKEN", "")
     with open(a.clients, encoding="utf-8") as f:
         clients = json.load(f)
+    if a.only != "all":
+        wanted = {x.strip() for x in a.only.split(",") if x.strip()}
+        clients = [c for c in clients if c.get("id") in wanted]
     docs, errors = collect_months(clients, months, token, log=lambda s: print(s, file=sys.stderr))
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump({"months": months, "docs": docs, "errors": errors}, f, ensure_ascii=False, indent=1)

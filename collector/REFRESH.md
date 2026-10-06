@@ -7,7 +7,7 @@
 2. `curl -s -o /dev/null -w '%{http_code}' https://api.apify.com/v2/users/me` が 200 であることを確認（API認証情報でトークンが付く）。
    200 でなければ 4. の失敗記録だけ書いて終了。
 3. ArtifactData `list`（collection `clients`, limit 1000）→ 対象クライアント（`all` なら active が false 以外の全社）を
-   `id` を含めて `clients.json` に保存し、`python3 collector/collect.py clients.json --month now --out metrics.json` を実行
+   `id` を含めて `clients.json` に保存し、`python3 collector/collect.py clients.json --month now --only <clientIds の値> --out metrics.json` を実行（`--only` で指定したクライアントだけを取得する。all なら全社）
    （今月と前月を1回の取得でまとめて作る）。
 4. `metrics.json` の `docs` ごとに `metrics/<docId>` を get し、あれば `if_version` 付き `update`（所感 `note` は残る）、
    なければ `set`。対象クライアントごとに `clients/<id>` を `update` して

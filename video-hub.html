@@ -319,7 +319,10 @@ function editClient(c){
   openModal(c.id?'クライアントを編集':'クライアントを追加',html,async()=>{
     const d=formVals(); if(!d.name){toast('クライアント名を入力してください');return}
     d.active=d.active!=='0';
-    if(await save('clients',c.id,d)){closeModal();toast('保存しました')}
+    const id=c.id||S.db.collection('clients').doc().id;
+    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source'])if(c[k]!==undefined)d[k]=c[k];
+    const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''));
+    if(await save('clients',id,d)){closeModal();toast('保存しました');if(urlChanged&&hasUrls(d)&&d.active!==false)requestFetch([id])}
   },c.id?async()=>{if(await del('clients',c.id)){closeModal();toast('削除しました')}}:null);
 }
 function editMetrics(cid,m){
@@ -575,7 +578,7 @@ function videoTableHtml(cid,m){
 function viewRep(){
   const cl=activeClients(); if(!cl.length)return needClients();
   const m=S.month,pm=madd(m,-1);
-  let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の所感・補足</button><button data-act="copyRep">報告文をコピー</button>'+(S.dl?'<button data-act="pdfOne" data-id="'+S.repClient+'">PDFを保存</button>':''):(S.dl?'<button class="primary" data-act="pdfAll">全クライアントのPDFを一括保存</button>':''))+'</div></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>月次レポート</h2><div class="filters"><select id="rep-client" data-act="repClient" aria-label="クライアント">'+[['','全クライアント比較']].concat(clientOptions()).map(([v,l])=>'<option value="'+esc(v)+'"'+(v===S.repClient?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>'+(S.repClient?'<button class="primary" data-act="editMetrics" data-id="'+S.repClient+'">'+mshort(m)+'の所感・補足</button><button data-act="fetchOne" data-id="'+S.repClient+'">数字を更新</button><button data-act="copyRep">報告文をコピー</button>'+(S.dl?'<button data-act="pdfOne" data-id="'+S.repClient+'">PDFを保存</button>':''):'<button data-act="fetchAll">全社の数字を更新</button>'+(S.dl?'<button class="primary" data-act="pdfAll">全クライアントのPDFを一括保存</button>':''))+'</div></div>';
   if(!S.repClient){
     h+='<p class="hint" style="margin:0">'+mlabel(m)+'の数値と、前月（'+mlabel(pm)+'）との比較です。クライアント名を押すと詳しいレポートを開きます。</p><div class="scroll"><table><thead><tr><th>クライアント</th><th>入力</th>'
       +Object.entries(PLAT).map(([p,d])=>'<th class="r"><span class="pf '+p+'">'+p.toUpperCase()+'</span>'+(p==='yt'?'登録者':'フォロワー')+'</th><th class="r">'+'再生数'+'</th>').join('')+'<th class="r">投稿本数</th></tr></thead><tbody>'
@@ -587,10 +590,10 @@ function viewRep(){
   }
   const c=cById(S.repClient); if(!c){S.repClient='';return viewRep()}
   const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
-  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(d&&d.source==='apify'?' ・ <span class="chip good">自動取得 '+dlabel((d.collectedAt||'').slice(0,10))+'</span>':'')+'</div></div>';
+  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
   if(!d){const urls=['ig','tt','yt'].filter(p=>c[p]);
-    h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）から、翌月1日の朝に動画ごとの数字が自動で入ります。':'クライアントタブでアカウントURLを登録すると、毎月1日に動画ごとの数字が自動で入ります。')+'</span>'+(urls.length?'':'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
-  if(d.source!=='apify'&&['ig','tt','yt'].some(p=>c[p]))h+='<div class="notice">登録されたアカウントURLからの数字はまだ取得していません。自動取得は毎月1日の朝（前月分）です。すぐに見たいときはClaudeに「○○の数字を取得して」と依頼してください。</div>';
+    h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(isRunning(c)?'いま数字を取得しています。5〜10分ほどで自動で表示されます。':urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）の数字は「数字を更新」ですぐに取得できます。毎月1日の朝にも自動で取得します。':'クライアントタブでアカウントURLを登録すると、数字が自動で取得されます。')+'</span>'+(fetchChip(c)&&!isRunning(c)?fetchChip(c):'')+(urls.length?(isRunning(c)?'':'<button class="primary" data-act="fetchOne" data-id="'+c.id+'">数字を更新</button>'):'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
+  if(d.source!=='apify'&&['ig','tt','yt'].some(p=>c[p]))h+='<div class="notice">登録されたアカウントURLからの数字はまだ取得していません。自動取得は毎月1日の朝（前月分）です。右上の「数字を更新」を押すと、5〜10分ほどで取得します。</div>';
   const tot=(doc,mm,k)=>doc?Object.keys(PLAT).reduce((a,p)=>{const x=platMetrics(doc,p,c.id,mm);return a+(x&&isNum(x[k])?x[k]:0)},0):null;
   const sumF=followersTotal(c.id,m),sumPF=followersTotal(c.id,pm);
   const sumV=tot(d,m,'views'),sumPV=tot(pd,pm,'views'),posts=tot(d,m,'posts'),pposts=tot(pd,pm,'posts');
@@ -640,7 +643,7 @@ function viewCli(){
   if(!all.length)return h+'<div class="panel empty"><b>まだ登録がありません</b><span>運用中の取引先を追加してください。</span></div></section>';
   h+='<div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th class="r">月の本数</th><th>運用開始</th><th>残り期間</th><th>アカウント</th><th>状態</th><th></th></tr></thead><tbody>'
     +all.map(c=>{const q=quota(c);let rest='—';if(c.startMonth){const end=madd(c.startMonth,6);const [ey,em]=end.split('-').map(Number),[ty,tm]=ymOf(TODAY).split('-').map(Number);const left=(ey-ty)*12+(em-tm);rest=left>0?'あと'+left+'ヶ月（'+mlabel(madd(end,-1))+'まで）':'<span class="chip warn">6ヶ月経過</span>'}
-      return'<tr><td><b>'+esc(c.name)+'</b></td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
+      return'<tr><td><b>'+esc(c.name)+'</b></td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+(fetchChip(c)?'<div>'+fetchChip(c)+'</div>':'')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
     +'</tbody></table></div></section>';
   return h;
 }
@@ -820,6 +823,41 @@ async function pdfAll(){
   if(skipped)setTimeout(()=>toast('データ未取得の'+skipped+'社は含まれていません'),2700);
 }
 
+/* ---------- SNSの数字を今すぐ取得（Claude Code Remote のルーティンを起動） ---------- */
+const REFRESH_TRIGGER='trig_018NmnVi9aNz6MDEDbPco6Zf';
+const hasUrls=c=>['ig','tt','yt'].some(p=>(c[p]||'').trim());
+const RUN_MAX=30*60*1000;
+const isRunning=c=>c.fetchStatus==='running'&&Date.now()-new Date(c.fetchRequestedAt||0).getTime()<RUN_MAX;
+function fetchChip(c){
+  if(isRunning(c))return'<span class="chip warn">取得中…（5〜10分ほど）</span>';
+  if(c.fetchStatus==='running')return'<span class="chip bad">取得が終わりませんでした。もう一度「数字を更新」を押してください</span>';
+  if(c.fetchStatus==='error')return'<span class="chip bad" title="'+esc(c.fetchError||'')+'">取得に失敗：'+esc((c.fetchError||'').slice(0,40))+'</span>';
+  if(c.fetchedAt)return'<span class="chip good">最終取得 '+dlabel(c.fetchedAt.slice(0,10))+' '+new Date(c.fetchedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+'</span>';
+  return'';
+}
+async function requestFetch(ids,quiet){
+  const targets=(ids==='all'?activeClients():ids.map(cById).filter(Boolean)).filter(hasUrls);
+  if(!targets.length){if(!quiet)toast('アカウントURLが登録されたクライアントがありません');return}
+  if(targets.some(isRunning)){if(!quiet)toast('いま取得中です。終わるまでお待ちください');return}
+  const mcp=window.claude&&window.claude.use?await window.claude.use('mcp'):null;
+  if(!mcp){toast('この表示では数字の取得を始められません');return}
+  const now=new Date().toISOString();
+  try{for(const c of targets)await S.db.collection('clients').doc(c.id).update({fetchStatus:'running',fetchRequestedAt:now})}
+  catch(e){toast('取得を始める権限がありません');return}
+  try{
+    await mcp.callTool('Claude Code Remote','fire_trigger',{trigger_id:REFRESH_TRIGGER,text:'clientIds: '+(ids==='all'?'all':targets.map(c=>c.id).join(','))});
+    toast(targets.length+'社の数字の取得を始めました。5〜10分ほどで自動で反映されます');
+  }catch(e){
+    const c=e&&e.code;
+    const msg=c==='server_not_connected'||c==='needs_reauth'?'Claude Code Remote の接続が必要です（claude.ai の設定 → コネクタ）'
+      :c==='not_in_manifest'||c==='consent_required'?'このページでの実行が許可されていません（ページの権限メニューから許可）'
+      :c==='tool_error'?'起動できませんでした（数字の更新はアカウントのオーナーだけが実行できます）'
+      :'起動できませんでした（'+(c||'error')+'）';
+    for(const t of targets){try{await S.db.collection('clients').doc(t.id).update({fetchStatus:'error',fetchError:msg})}catch(_){}}
+    toast(msg);
+  }
+}
+
 /* ---------- render ---------- */
 const VIEWS={dash:viewDash,prod:viewProd,cal:viewCal,ed:viewEd,rep:viewRep,cli:viewCli};
 function render(){
@@ -855,6 +893,8 @@ document.addEventListener('click',async e=>{
     case'openRep':S.repClient=id;S.tab='rep';try{localStorage.setItem('vh.rep',id);localStorage.setItem('vh.tab','rep')}catch(_){}render();window.scrollTo(0,0);break;
     case'payOpen':{const k=Number(t.dataset.k);S.payOpen=S.payOpen===k?null:k;render();break}
     case'payCsv':payCsv();break;
+    case'fetchOne':requestFetch([id]);break;
+    case'fetchAll':requestFetch('all');break;
     case'edFilter':S.f.editor=t.dataset.name;S.f.scope='month';S.tab='prod';render();break;
     case'vsort':S.vsort=t.dataset.k;render();break;
     case'pdfOne':pdfOne(id);break;
