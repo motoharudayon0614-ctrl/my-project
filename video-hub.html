@@ -1034,7 +1034,7 @@ function render(){
   const main=document.getElementById('main');
   if(S.dbState==='none'){main.innerHTML='<div class="notice">この画面ではデータの保存・共有が使えません。claude.ai にサインインした状態で開くと、チーム全員で同じデータを見られます。</div>';return}
   if(S.loaded<7){main.innerHTML='<div class="empty"><b>読み込み中…</b></div>';return}
-  main.innerHTML=(VIEWS[S.tab]||viewDash)();
+  main.innerHTML=(S.canWrite===false?'<div class="notice"><b>この画面は閲覧のみです。</b>入力・変更・削除はできません。編集するには、オーナーに「共有」からあなたのメールアドレスを<b>投稿者または編集者</b>として招待してもらってください（招待されたアカウントでclaude.aiにログインして開きます）。</div>':'')+(VIEWS[S.tab]||viewDash)();
 }
 
 /* ---------- events ---------- */
@@ -1102,7 +1102,7 @@ render();
   const sub=(col,key)=>db.collection(col).onSnapshot(snap=>{S[key]=snap.docs.map(d=>Object.assign({id:d.id},d.data()));if(!S['_'+key]){S['_'+key]=1;S.loaded++;if(S.loaded===7)autoSync()}if(!document.querySelector('.ov'))render()},err=>{toast('データの同期が止まりました。ページを開き直してください')});
   sub('clients','clients');sub('videos','videos');sub('shoots','shoots');sub('metrics','metrics');sub('settings','settings');sub('gcal','gcal');sub('trash','trash');
   async function autoSync(){const at=mainSettings().sheetSyncedAt;if(!at||Date.now()-new Date(at).getTime()>10*60*1000)await syncSheet(false);syncGcal(false);pruneTrash()}
-  window.claude.use('user').then(u=>{S.isOwner=!!(u&&u.isOwner&&u.isOwner());render()});
+  window.claude.use('user').then(async u=>{S.isOwner=!!(u&&u.isOwner&&u.isOwner());try{S.canWrite=u&&u.can?await u.can('data.write'):null}catch(_){S.canWrite=null}render()});
   window.claude.use('downloads').then(d=>{S.dl=d;if(!document.querySelector('.ov'))render()});
 })();
 })();
