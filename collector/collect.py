@@ -59,13 +59,21 @@ def tt_user(v):
     return u if re.fullmatch(r"[A-Za-z0-9._]{2,24}", u or "") else None
 
 
-def yt_url(v):
+def yt_handle(v):
+    """'@handle' or 'channel/UC…' id from any channel URL form (/featured, /shorts, ?si=…), lower-cased."""
     v = (v or "").strip()
-    if not v:
-        return None
-    if "youtube.com/" in v or "youtu.be/" in v:
-        return v if v.startswith("http") else "https://" + v
-    return "https://www.youtube.com/@" + v.lstrip("@")
+    m = re.search(r"youtube\.com/(@[A-Za-z0-9._-]+)", v) or re.search(r"youtube\.com/(channel/UC[A-Za-z0-9_-]+)", v)
+    if m:
+        return m.group(1).lower()
+    if v and "/" not in v:
+        return "@" + v.lstrip("@").lower()
+    return None
+
+
+def yt_url(v):
+    """Canonical channel URL, so a pasted '/shorts' or '/featured' page does not change what is fetched."""
+    h = yt_handle(v)
+    return "https://www.youtube.com/" + h if h else None
 
 
 # ---------- small helpers ----------
@@ -257,9 +265,15 @@ def collect(clients, month, token, log=print):
                                                       "maxResultsShorts": 30, "maxResultStreams": 0}, token))
 
     def yt_items_for(url):
-        key = url.rstrip("/").split("/")[-1].lower()
-        return [i for i in raw["yt"] if key in json.dumps([i.get("channelUrl"), i.get("inputChannelUrl"), i.get("input"),
-                                                          i.get("channelUsername"), i.get("fromYTUrl")]).lower()]
+        """Only the items whose channel is this client's channel (never a fallback to everything)."""
+        h = yt_handle(url)
+        out = []
+        for i in raw["yt"]:
+            cands = {yt_handle(i.get(k) or "") for k in ("channelUrl", "inputChannelUrl", "fromYTUrl", "input")}
+            un = (i.get("channelUsername") or "").lower().lstrip("@")
+            if h in cands or (un and h == "@" + un):
+                out.append(i)
+        return out
 
     docs = []
     for c in clients:
@@ -274,7 +288,7 @@ def collect(clients, month, token, log=print):
             doc["tt"], inm = monthly(prof, vids, month, extra=("shares", "saves"))
             doc["videos"] += inm
         if yt[c["id"]] and raw["yt"]:
-            items = yt_items_for(yt[c["id"]]) if len({u for u in yt.values() if u}) > 1 else raw["yt"]
+            items = yt_items_for(yt[c["id"]])
             prof, vids = norm_yt(items)
             doc["yt"], inm = monthly(prof, vids, month)
             doc["videos"] += inm

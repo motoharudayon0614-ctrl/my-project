@@ -12,7 +12,7 @@ TT = [{"authorMeta": {"name": "shop_a", "fans": 950}, "webVideoUrl": "https://ww
        "playCount": 5000, "diggCount": 200, "commentCount": 5, "shareCount": 3, "collectCount": 9, "text": "tour"},
       {"authorMeta": {"name": "shop_a", "fans": 950}, "webVideoUrl": "https://www.tiktok.com/@shop_a/video/2", "createTimeISO": "2026-09-10T03:00:00.000Z",
        "playCount": 1000, "diggCount": 50, "commentCount": 1, "shareCount": 0, "collectCount": 1}]
-YT = [{"numberOfSubscribers": 4210, "url": "https://www.youtube.com/watch?v=a", "title": "Room tour", "date": "2026-09-12T00:00:00.000Z", "viewCount": 3000, "likes": 80, "commentsCount": 4, "duration": "10:21"}]
+YT = [{"channelUrl": "https://www.youtube.com/@shop_a", "numberOfSubscribers": 4210, "url": "https://www.youtube.com/watch?v=a", "title": "Room tour", "date": "2026-09-12T00:00:00.000Z", "viewCount": 3000, "likes": 80, "commentsCount": 4, "duration": "10:21"}]
 
 
 class T(unittest.TestCase):
@@ -22,6 +22,21 @@ class T(unittest.TestCase):
         self.assertIsNone(collect.ig_user("https://www.instagram.com/p/abc/"))
         self.assertEqual(collect.tt_user("https://www.tiktok.com/@shop_a?lang=ja"), "shop_a")
         self.assertEqual(collect.yt_url("@shop_a"), "https://www.youtube.com/@shop_a")
+        self.assertEqual(collect.yt_url("https://www.youtube.com/@GMcorporationGIMMIC/featured"), "https://www.youtube.com/@gmcorporationgimmic")
+        self.assertEqual(collect.yt_url("https://youtube.com/@kamakuraprote?si=abc"), "https://www.youtube.com/@kamakuraprote")
+
+    def test_youtube_channels_are_not_mixed(self):
+        """Two clients whose URLs both end in /featured must each get only their own channel."""
+        yt = [{"channelUrl": "https://www.youtube.com/@aaa", "url": "https://www.youtube.com/shorts/1", "date": "2026-09-02T00:00:00Z", "viewCount": 10, "duration": "0:30"},
+              {"channelUrl": "https://www.youtube.com/@bbb", "url": "https://www.youtube.com/shorts/2", "date": "2026-09-03T00:00:00Z", "viewCount": 20, "duration": "0:30"},
+              {"channelUrl": "https://www.youtube.com/@bbb", "url": "https://www.youtube.com/shorts/3", "date": "2026-09-04T00:00:00Z", "viewCount": 30, "duration": "0:30"}]
+        with mock.patch.object(collect, "run_actor", side_effect=lambda a, i, t: yt if a.startswith("streamers") else []):
+            docs, _ = collect.collect([{"id": "a", "yt": "https://www.youtube.com/@aaa/featured"}, {"id": "b", "yt": "https://www.youtube.com/@bbb/shorts"},
+                                       {"id": "c", "yt": "https://www.youtube.com/@ccc"}], "2026-09", "", log=lambda s: None)
+        by = {d["docId"]: d["data"] for d in docs}
+        self.assertEqual([v["url"] for v in by["a_2026-09"]["videos"]], ["https://www.youtube.com/shorts/1"])
+        self.assertEqual(len(by["b_2026-09"]["videos"]), 2)
+        self.assertEqual(by["c_2026-09"]["videos"], [])
 
     def test_collect(self):
         fx = {"apify~instagram-profile-scraper": IG, "apify~instagram-reel-scraper": [], "clockworks~tiktok-scraper": TT, "streamers~youtube-scraper": YT}
