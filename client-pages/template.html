@@ -43,9 +43,16 @@ header .upd{font-size:12px;color:var(--muted)}
 .month summary .cnt b{font-family:var(--num);font-size:20px;color:var(--ink)}
 .month summary::after{content:"▾";color:var(--muted);margin-left:8px}
 .month:not([open]) summary::after{content:"▸"}
-.row{display:grid;grid-template-columns:88px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
-.row .d{font-family:var(--num);font-size:15px}
-.row .d small{display:block;font-size:11px;color:var(--muted);font-family:var(--font)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 300px 200px;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.dates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dt{display:grid;gap:1px;padding:6px 10px;border-radius:8px;background:var(--sunk)}
+.dt .k{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.dt .v{font-family:var(--num);font-size:16px;font-weight:600;line-height:1.2}
+.dt .v small{font-family:var(--font);font-size:11px;font-weight:500;color:var(--muted);margin-left:2px}
+.dt.post{border-left:3px solid var(--accent)}
+.dt.post .tag{font-size:10px;font-weight:700;color:var(--accent)}
+.dt.none .v{font-size:13px;color:var(--muted);font-weight:500}
+.colhead{display:grid;grid-template-columns:minmax(0,1fr) 300px 200px;gap:14px;padding:8px 16px 0;font-size:11px;color:var(--muted)}
 .row .t{min-width:0}
 .row .t b{display:block;overflow-wrap:anywhere}
 .st{display:inline-block;font-size:11px;font-weight:700;border:1px solid currentColor;border-radius:999px;padding:0 8px;margin-top:3px}
@@ -54,7 +61,7 @@ header .upd{font-size:12px;color:var(--muted)}
 .links a{font-size:12px;font-weight:700;text-decoration:none;color:var(--accent-ink);background:var(--accent);border-radius:8px;padding:6px 10px;white-space:nowrap}
 .links a.sub{background:transparent;color:var(--accent);border:1px solid var(--accent)}
 .links .none{font-size:12px;color:var(--muted)}
-@media (max-width:560px){.row{grid-template-columns:64px minmax(0,1fr)}.links{grid-column:1/-1;justify-content:flex-start}}
+@media (max-width:720px){.row{grid-template-columns:minmax(0,1fr)}.links{justify-content:flex-start}.colhead{display:none}}
 .sns{display:grid;gap:10px}
 .sns h2{font-size:17px;margin:0}
 .sns table{width:100%;border-collapse:collapse;font-size:13px}
@@ -95,7 +102,8 @@ footer{font-size:12px;color:var(--muted)}
 const D=JSON.parse(document.getElementById('data').textContent);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const W='日月火水木金土';
-const dl=d=>{if(!d)return'';const [y,m,dd]=d.split('-').map(Number);return m+'/'+dd+'<small>'+W[new Date(y,m-1,dd).getDay()]+'曜日</small>'};
+const dl=d=>{if(!d)return'';const [y,m,dd]=d.split('-').map(Number);return m+'/'+dd+'<small>（'+W[new Date(y,m-1,dd).getDay()]+'）</small>'};
+const dateBox=(cls,label,d,tag)=>'<div class="dt '+cls+(d?'':' none')+'"><span class="k">'+label+(tag?' <span class="tag">'+tag+'</span>':'')+'</span><span class="v">'+(d?dl(d):'未定')+'</span></div>';
 const ml=m=>{const [y,mo]=m.split('-');return y+'年'+Number(mo)+'月'};
 const ST={done:'完成',wait:'確認待ち',wip:'制作中'};
 const fmt=n=>typeof n==='number'?n.toLocaleString('ja-JP'):'—';
@@ -120,8 +128,8 @@ function render(){
   if(!vs.length){list.innerHTML='<div class="empty">条件に合う動画はありません。</div>';return}
   const ms=[...new Set(vs.map(v=>v.month))].sort().reverse();
   list.innerHTML=ms.map((m,i)=>{const rows=vs.filter(v=>v.month===m).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    return'<details class="month"'+(i<3||q||mF?' open':'')+'><summary><h2>'+ml(m)+'</h2><span class="cnt"><b>'+rows.length+'</b> 本</span></summary>'
-      +rows.map(v=>'<div class="row"><div class="d">'+(v.date?dl(v.date):'<small>投稿日未定</small>')+'</div><div class="t"><b>'+esc(v.title)+'</b><span class="st '+v.st+'">'+ST[v.st]+'</span></div><div class="links">'
+    return'<details class="month"'+(i<3||q||mF?' open':'')+'><summary><h2>'+ml(m)+'</h2><span class="cnt"><b>'+rows.length+'</b> 本</span></summary><div class="colhead"><span>動画</span><span>日程</span><span></span></div>'
+      +rows.map(v=>'<div class="row"><div class="t"><b>'+esc(v.title)+'</b><span class="st '+v.st+'">'+ST[v.st]+'</span></div><div class="dates">'+dateBox('due',v.st==='done'?'完成日':'完成予定日',v.due)+dateBox('post','投稿日',v.date,v.date?(v.date<=D.today?'投稿済':'予定'):'')+'</div><div class="links">'
         +(v.links.length?v.links.map((l,j)=>'<a'+(j?' class="sub"':'')+' href="'+esc(l.u)+'" target="_blank" rel="noopener">'+esc(l.k)+'</a>').join(''):'<span class="none">リンク準備中</span>')+'</div></div>').join('')+'</details>'}).join('<div style="height:12px"></div>');
 }
 document.getElementById('q').addEventListener('input',render);

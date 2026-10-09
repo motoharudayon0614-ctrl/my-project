@@ -86,7 +86,7 @@ def build(dump, out_dir):
             month = (date or v.get("dueDate") or v.get("orderDate") or "")[:7]
             if not month:
                 continue
-            rows.append({"title": v.get("title") or "(無題)", "date": date, "month": month,
+            rows.append({"title": v.get("title") or "(無題)", "date": date, "due": v.get("dueDate") or "", "month": month,
                          "st": status(v.get("status")), "links": links(v)})
         if not rows:
             continue
