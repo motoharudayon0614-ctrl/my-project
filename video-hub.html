@@ -769,24 +769,32 @@ async function syncSheet(manual){
         orderDate:sdate(g(r,'order')),storedDate:sdate(g(r,'stored')),price:yen(g(r,'price')),url:g(r,'url'),docUrl:g(r,'doc'),storeUrl:g(r,'store'),memo:memo,sheetRow:i+2};
     });
     const cur={};S.videos.forEach(v=>{cur[v.id]=v});
-    const writes=[];
+    const writes=[],touched=new Set();
     for(const [cid,c] of Object.entries(newClients))writes.push(()=>S.db.collection('clients').doc(cid).set(Object.assign({updatedAt:new Date().toISOString()},c)));
     for(const [vid,w] of Object.entries(want)){
       const old=cur[vid];
       if(old&&SHEET_FIELDS.every(k=>(old[k]??null)===(w[k]??null)))continue;
       const doc=Object.assign({type:old&&old.type||'short',platforms:old&&old.platforms||[],shootDate:old&&old.shootDate||''},w,{source:'sheet',updatedAt:new Date().toISOString()});
-      writes.push(()=>S.db.collection('videos').doc(vid).set(doc));
+      writes.push(()=>S.db.collection('videos').doc(vid).set(doc));touched.add(w.clientId);if(old)touched.add(old.clientId);
     }
-    for(const v of S.videos)if(v.source==='sheet'&&!want[v.id])writes.push(()=>S.db.collection('videos').doc(v.id).delete());
+    for(const v of S.videos)if(v.source==='sheet'&&!want[v.id]){writes.push(()=>S.db.collection('videos').doc(v.id).delete());touched.add(v.clientId)}
     let n=0;
     for(const w of writes){await w();n++;if(n%20===0)toast('スプレッドシートを同期中… '+n+' / '+writes.length)}
     const ms=Object.assign({},mainSettings());delete ms.id;
     await S.db.collection('settings').doc('main').set(Object.assign(ms,{sheetSyncedAt:new Date().toISOString(),sheetRows:Object.keys(want).length}));
     if(manual&&writes.length)setTimeout(()=>syncGcal(false),800);
     if(manual||writes.length)toast(writes.length?'スプレッドシートから'+writes.length+'件を更新しました':'スプレッドシートと同じ内容です');
+    // a manual sync also refreshes what clients see: their library page and their Drive PDF
+    if(manual&&touched.size)setTimeout(()=>refreshClientViews([...touched]),2800);
   }catch(e){
     S.sheetErr=e&&e.code==='invalid_argument'?'このページのデータを書き換える権限がないため、同期できません。':'同期の途中で止まりました。「今すぐ同期」でもう一度試してください。';
   }finally{S.syncing=false;render()}
+}
+async function refreshClientViews(ids){
+  const cs=ids.map(cById).filter(c=>c&&c.active!==false);
+  const lib=cs.filter(c=>c.libraryUrl&&!libRunning(c)).map(c=>c.id),pdf=cs.filter(c=>c.drivePdfId).map(c=>c.id);
+  if(lib.length)await requestLibrary(lib);
+  if(pdf.length)setTimeout(()=>libPdfToDrive(pdf),lib.length?2800:0);
 }
 function sheetBar(){
   const ms=mainSettings();const at=ms.sheetSyncedAt;
@@ -794,7 +802,7 @@ function sheetBar(){
     +(S.syncing?'同期しています…':at?'最終同期 '+dlabel(at.slice(0,10))+' '+new Date(at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+'（'+fmt(ms.sheetRows)+'件）':'まだ同期していません')
     +'</span>'+(S.sheetErr?'<span class="chip bad" style="white-space:normal">'+esc(S.sheetErr)+'</span>':'')
     +'<span style="margin-left:auto;display:flex;gap:8px"><a class="btn" href="'+esc(sheetUrl())+'" target="_blank" rel="noopener">シートを開く</a><button class="primary" data-act="syncSheet"'+(S.syncing?' disabled':'')+'>今すぐ同期</button><button data-act="libAll" title="同期した内容を、全社のお客様用ページ（動画ライブラリ）にも反映します">お客様用ページにも反映</button></span></div>'
-    +'<p class="hint" style="margin:0">案件名・ステータス・納期・編集者・投稿日などはスプレッドシートが元データです。変更はシートで行い、ここでは「今すぐ同期」で反映します（このページを開いたときにも自動で同期します）。</p>';
+    +'<p class="hint" style="margin:0">案件名・ステータス・納期・編集者・投稿日などはスプレッドシートが元データです。変更はシートで行い、ここでは「今すぐ同期」で反映します（このページを開いたときにも自動で同期します）。「今すぐ同期」を押すと、変更があったお客様のお客様用ページとドライブのPDFも自動で作り直します。</p>';
 }
 
 /* ---------- 契約本数との比較 ----------
