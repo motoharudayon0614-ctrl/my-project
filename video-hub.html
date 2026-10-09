@@ -360,7 +360,7 @@ function editClient(c){
     const d=formVals(); if(!d.name){toast('クライアント名を入力してください');return}
     d.active=d.active!=='0';
     const id=c.id||S.db.collection('clients').doc().id;
-    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source','quotaHistory','quotaMonths','aliases'])if(c[k]!==undefined)d[k]=c[k];
+    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source','quotaHistory','quotaMonths','aliases','libraryUrl'])if(c[k]!==undefined)d[k]=c[k];
     if(c.name&&normName(c.name)!==normName(d.name))d.aliases=[...new Set((c.aliases||[]).concat([c.name]))];
     const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''));
     if(await save('clients',id,d)){closeModal();toast('保存しました');if(urlChanged&&hasUrls(d)&&d.active!==false)requestFetch([id])}
@@ -642,7 +642,7 @@ function viewRep(){
   }
   const c=cById(S.repClient); if(!c){S.repClient='';return viewRep()}
   const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
-  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+' <button class="ghost" style="font-size:12px;vertical-align:middle" data-act="editClient" data-id="'+c.id+'">名前・設定を変更</button></div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
+  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+' <button class="ghost" style="font-size:12px;vertical-align:middle" data-act="editClient" data-id="'+c.id+'">名前・設定を変更</button>'+(c.libraryUrl?' <a class="hint" style="font-size:12px" href="'+esc(c.libraryUrl)+'" target="_blank" rel="noopener">お客様用ページ ↗</a>':'')+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
   if(!d){const urls=['ig','tt','yt'].filter(p=>c[p]);
     h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(isRunning(c)?'いま数字を取得しています。5〜10分ほどで自動で表示されます。':urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）の数字は「数字を更新」ですぐに取得できます。毎月1日の朝にも自動で取得します。':'クライアントタブでアカウントURLを登録すると、数字が自動で取得されます。')+'</span>'+(fetchChip(c)&&!isRunning(c)?fetchChip(c):'')+(urls.length?(isRunning(c)?'':'<button class="primary" data-act="fetchOne" data-id="'+c.id+'">数字を更新</button>'):'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
   if(d.source!=='apify'&&['ig','tt','yt'].some(p=>c[p]))h+='<div class="notice">登録されたアカウントURLからの数字はまだ取得していません。自動取得は毎月1日の朝（前月分）です。右上の「数字を更新」を押すと、5〜10分ほどで取得します。</div>';
@@ -697,7 +697,7 @@ function viewCli(){
   if(!all.length)return h+'<div class="panel empty"><b>まだ登録がありません</b><span>運用中の取引先を追加してください。</span></div></section>';
   h+='<div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th class="r">月の本数</th><th>運用開始</th><th>残り期間</th><th>アカウント</th><th>状態</th><th></th></tr></thead><tbody>'
     +all.map(c=>{const q=quota(c);let rest='—';if(c.startMonth){const end=madd(c.startMonth,6);const [ey,em]=end.split('-').map(Number),[ty,tm]=ymOf(TODAY).split('-').map(Number);const left=(ey-ty)*12+(em-tm);rest=left>0?'あと'+left+'ヶ月（'+mlabel(madd(end,-1))+'まで）':'<span class="chip warn">6ヶ月経過</span>'}
-      return'<tr><td><b>'+esc(c.name)+'</b></td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+(fetchChip(c)?'<div>'+fetchChip(c)+'</div>':'')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
+      return'<tr><td><b>'+esc(c.name)+'</b>'+(c.libraryUrl?'<div><a class="hint" href="'+esc(c.libraryUrl)+'" target="_blank" rel="noopener">お客様用ページ ↗</a></div>':'')+'</td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+(fetchChip(c)?'<div>'+fetchChip(c)+'</div>':'')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
     +'</tbody></table></div></section>'+trashHtml();
   return h;
 }
