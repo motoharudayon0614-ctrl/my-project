@@ -13,6 +13,6 @@
    - `libraryUrl` が無ければ、Artifact publish（icon は video）で新しく作り、そのURLを控える。
    - `<out>/<id>.html` が無い（動画0件など）場合は飛ばす。
 5. ArtifactData `update`（if_version 付き）で対象の `clients/<id>` に
-   `libraryUpdatedAt`（ISO 時刻）, `libraryStatus: "done"`（失敗なら `"error"` と `libraryError`）,
+   `libraryUpdatedAt`（実際の時刻。`date -u +%Y-%m-%dT%H:%M:%SZ` の出力をそのまま使い、推測で書かない）, `libraryStatus: "done"`（失敗なら `"error"` と `libraryError`）,
    新規作成した場合は `libraryUrl` を書く。50件ずつ `batch` でまとめる。
 6. 更新した社数・失敗したクライアントを日本語で短く報告する。
