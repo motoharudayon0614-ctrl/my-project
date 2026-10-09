@@ -360,7 +360,7 @@ function editClient(c){
     const d=formVals(); if(!d.name){toast('クライアント名を入力してください');return}
     d.active=d.active!=='0';
     const id=c.id||S.db.collection('clients').doc().id;
-    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source','quotaHistory','quotaMonths','aliases','libraryUrl','libraryUpdatedAt','libraryStatus','libraryError','libraryRequestedAt'])if(c[k]!==undefined)d[k]=c[k];
+    for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source','quotaHistory','quotaMonths','aliases','libraryUrl','libraryUpdatedAt','libraryStatus','libraryError','libraryRequestedAt','driveFolderId','drivePdfId','drivePdfAt','driveShared'])if(c[k]!==undefined)d[k]=c[k];
     if(c.name&&normName(c.name)!==normName(d.name))d.aliases=[...new Set((c.aliases||[]).concat([c.name]))];
     const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''));
     if(await save('clients',id,d)){closeModal();toast('保存しました');if(urlChanged&&hasUrls(d)&&d.active!==false)requestFetch([id])}
@@ -642,7 +642,7 @@ function viewRep(){
   }
   const c=cById(S.repClient); if(!c){S.repClient='';return viewRep()}
   const d=metricsFor(c.id,m),pd=metricsFor(c.id,pm);
-  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+' <button class="ghost" style="font-size:12px;vertical-align:middle" data-act="editClient" data-id="'+c.id+'">名前・設定を変更</button>'+(c.libraryUrl?' <a class="hint" style="font-size:12px" href="'+esc(c.libraryUrl)+'" target="_blank" rel="noopener">お客様用ページ ↗</a> <button class="ghost" style="font-size:12px" data-act="libOne" data-id="'+c.id+'">お客様用ページを更新</button> '+libChip(c):'')+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
+  h+='</section><section class="panel sec" id="report"><div class="rep-head"><div><div class="hint">SNS運用 月次レポート</div><div class="ttl">'+esc(c.name)+' 様 ／ '+mlabel(m)+' <button class="ghost" style="font-size:12px;vertical-align:middle" data-act="editClient" data-id="'+c.id+'">名前・設定を変更</button>'+(c.libraryUrl?' <a class="hint" style="font-size:12px" href="'+esc(c.libraryUrl)+'" target="_blank" rel="noopener">お客様用ページ ↗</a> <button class="ghost" style="font-size:12px" data-act="libOne" data-id="'+c.id+'">お客様用ページを更新</button> '+libChip(c):'')+(libPdfOk(c)?' <button class="ghost" style="font-size:12px" data-act="drivePdf" data-id="'+c.id+'">動画一覧PDFをドライブに保存</button> '+drivePdfChip(c):'')+'</div></div><div class="meta">比較対象：'+mlabel(pm)+' ・ '+planChip(c)+(fetchChip(c)?' ・ '+fetchChip(c):'')+'</div></div>';
   if(!d){const urls=['ig','tt','yt'].filter(p=>c[p]);
     h+='<div class="empty"><b>'+mlabel(m)+'のデータはまだありません</b><span>'+(isRunning(c)?'いま数字を取得しています。5〜10分ほどで自動で表示されます。':urls.length?'登録済みのアカウント（'+urls.map(p=>PLAT[p].name).join('・')+'）の数字は「数字を更新」ですぐに取得できます。毎月1日の朝にも自動で取得します。':'クライアントタブでアカウントURLを登録すると、数字が自動で取得されます。')+'</span>'+(fetchChip(c)&&!isRunning(c)?fetchChip(c):'')+(urls.length?(isRunning(c)?'':'<button class="primary" data-act="fetchOne" data-id="'+c.id+'">数字を更新</button>'):'<button class="primary" data-act="editClient" data-id="'+c.id+'">アカウントURLを登録</button>')+'</div></section>';return h}
   if(d.source!=='apify'&&['ig','tt','yt'].some(p=>c[p]))h+='<div class="notice">登録されたアカウントURLからの数字はまだ取得していません。自動取得は毎月1日の朝（前月分）です。右上の「数字を更新」を押すと、5〜10分ほどで取得します。</div>';
@@ -693,11 +693,11 @@ function reportText(){
 
 function viewCli(){
   const all=S.clients.slice().sort((a,b)=>(b.active!==false)-(a.active!==false)||(a.name||'').localeCompare(b.name||'','ja'));
-  let h='<section class="sec"><div class="sec-h"><h2>クライアント</h2><div class="filters"><button data-act="libAll">全社のお客様用ページを更新</button><button class="primary" data-act="addClient">＋ クライアントを追加</button></div></div><div class="filters"><label class="hint" for="set-company">PDFレポートの発行元</label><input id="set-company" value="'+esc(company())+'" placeholder="例：株式会社〇〇"><button data-act="saveCompany">保存</button></div><div class="filters"><label class="hint" for="set-sheet">制作管理シートのURL</label><input id="set-sheet" style="min-width:min(420px,100%)" value="'+esc(mainSettings().sheet||sheetUrl())+'"><button data-act="saveSheet">保存</button></div>';
+  let h='<section class="sec"><div class="sec-h"><h2>クライアント</h2><div class="filters"><button data-act="libAll">全社のお客様用ページを更新</button><button data-act="drivePdfAll" title="お客様ごとのGoogleドライブのフォルダに、動画一覧のPDFを保存します">全社の動画一覧PDFをドライブに保存</button><button class="primary" data-act="addClient">＋ クライアントを追加</button></div></div><div class="filters"><label class="hint" for="set-company">PDFレポートの発行元</label><input id="set-company" value="'+esc(company())+'" placeholder="例：株式会社〇〇"><button data-act="saveCompany">保存</button></div><div class="filters"><label class="hint" for="set-sheet">制作管理シートのURL</label><input id="set-sheet" style="min-width:min(420px,100%)" value="'+esc(mainSettings().sheet||sheetUrl())+'"><button data-act="saveSheet">保存</button></div>';
   if(!all.length)return h+'<div class="panel empty"><b>まだ登録がありません</b><span>運用中の取引先を追加してください。</span></div></section>';
   h+='<div class="scroll"><table><thead><tr><th>クライアント</th><th>プラン</th><th class="r">月の本数</th><th>運用開始</th><th>残り期間</th><th>アカウント</th><th>状態</th><th></th></tr></thead><tbody>'
     +all.map(c=>{const q=quota(c);let rest='—';if(c.startMonth){const end=madd(c.startMonth,6);const [ey,em]=end.split('-').map(Number),[ty,tm]=ymOf(TODAY).split('-').map(Number);const left=(ey-ty)*12+(em-tm);rest=left>0?'あと'+left+'ヶ月（'+mlabel(madd(end,-1))+'まで）':'<span class="chip warn">6ヶ月経過</span>'}
-      return'<tr><td><b>'+esc(c.name)+'</b>'+(c.libraryUrl?'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a class="hint" href="'+esc(c.libraryUrl)+'" target="_blank" rel="noopener">お客様用ページ ↗</a><button class="ghost" style="font-size:11px;padding:0 6px" data-act="libOne" data-id="'+c.id+'">更新</button>'+libChip(c)+'</div>':'')+'</td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+(fetchChip(c)?'<div>'+fetchChip(c)+'</div>':'')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
+      return'<tr><td><b>'+esc(c.name)+'</b>'+(libPdfOk(c)?'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="ghost" style="font-size:11px;padding:0 6px" data-act="drivePdf" data-id="'+c.id+'">動画一覧PDFをドライブに保存</button>'+drivePdfChip(c)+'</div>':'')+(c.libraryUrl?'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a class="hint" href="'+esc(c.libraryUrl)+'" target="_blank" rel="noopener">お客様用ページ ↗</a><button class="ghost" style="font-size:11px;padding:0 6px" data-act="libOne" data-id="'+c.id+'">更新</button>'+libChip(c)+'</div>':'')+'</td><td>'+planChip(c)+'</td><td class="r num">ショート'+q.short+' ／ YT'+q.long+'</td><td>'+(c.startMonth?mlabel(c.startMonth):'—')+'</td><td>'+rest+'</td><td>'+['ig','tt','yt'].filter(p=>c[p]).map(p=>'<span class="pf '+p+'">'+p.toUpperCase()+'</span>'+esc(c[p])).join(' ')+(fetchChip(c)?'<div>'+fetchChip(c)+'</div>':'')+'</td><td>'+(c.active===false?'<span class="chip muted">停止</span>':'<span class="chip good">運用中</span>')+'</td><td><button class="ghost" data-act="editClient" data-id="'+c.id+'">編集</button></td></tr>'}).join('')
     +'</tbody></table></div></section>'+trashHtml();
   return h;
 }
@@ -1049,6 +1049,114 @@ async function requestLibrary(ids){
     for(const t of targets){try{await S.db.collection('clients').doc(t.id).update({libraryStatus:'error',libraryError:msg})}catch(_){}}toast(msg)}
 }
 
+/* ---------- お客様用 動画一覧PDF（Googleドライブのお客様ごとのフォルダに保存） ---------- */
+const LIB_SKIP=new Set(['突発依頼','(クライアント未記入)']);
+const LIB_DONE=new Set(['完了','格納済','投稿済']),LIB_WAIT=new Set(['納品済','クライアント確認']);
+const LIB_ST={done:'完成',wait:'確認待ち',wip:'制作中'};
+const FOLDER_MIME='application/vnd.google-apps.folder';
+const libPdfOk=c=>c&&c.active!==false&&!LIB_SKIP.has((c.name||'').trim())&&libRows(c.id).length>0;
+// Client-facing links only (same rules as client-pages/build.py): Drive / YouTube / transfer URLs, never internal Google Docs.
+function libLinks(v){
+  const out=[],seen=new Set();
+  (v.storeUrl||'').split(/\s+/).filter(u=>/^https?:/.test(u)).forEach((u,i)=>{if(!seen.has(u)){seen.add(u);out.push({k:i?'動画'+(i+1):'動画を見る',u})}});
+  const u=(v.url||'').trim();
+  if(/^https?:/.test(u)&&!seen.has(u)&&!u.includes('docs.google.com')){let k=/youtube\.com|youtu\.be/.test(u)?'YouTube':u.includes('drive.google.com')?'納品データ':'ダウンロード';if(!out.length&&k==='納品データ')k='動画を見る';out.push({k,u})}
+  return out;
+}
+function libRows(cid){
+  return S.videos.filter(v=>v.clientId===cid).map(v=>{const date=v.postDate||'',month=(date||v.dueDate||v.orderDate||'').slice(0,7);
+    return month?{title:v.title||'(無題)',date,due:v.dueDate||'',month,st:LIB_DONE.has(v.status)?'done':LIB_WAIT.has(v.status)?'wait':'wip',links:libLinks(v)}:null}).filter(Boolean);
+}
+const LIB_CSS='.lp{padding:40px 44px 60px;display:grid;gap:12px;align-content:start}.lp .hd{border-bottom:3px solid #22405f;padding-bottom:12px}.lp .hd .k{font-size:11px;letter-spacing:.18em;color:#5a6a7c}.lp .hd .n{font-size:26px;font-weight:700}.lp .hd .u{font-size:12px;color:#5a6a7c}'
+ +'.lp .t4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.lp .mh{display:flex;justify-content:space-between;align-items:baseline;background:#f1f4f8;border-radius:8px;padding:8px 12px;margin-top:6px}.lp .mh b{font-size:16px}.lp .mh span{font-size:12px;color:#5a6a7c}.lp .mh span b{font-family:var(--num);font-size:18px;color:#17283b}'
+ +'.lp .rw{display:grid;grid-template-columns:minmax(0,1fr) 108px 120px 150px;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid #d9e0e8}.lp .rw .tt b{display:block;font-size:13px;line-height:1.4;overflow-wrap:anywhere}'
+ +'.lp .st{display:inline-block;font-size:10px;font-weight:700;border:1px solid currentColor;border-radius:999px;padding:0 7px;margin-top:2px}.lp .st.done{color:#1f7a52}.lp .st.wait{color:#a86a00}.lp .st.wip{color:#3b6aa0}'
+ +'.lp .dt{display:grid;padding:3px 8px;border-radius:6px;background:#f1f4f8}.lp .dt .k{font-size:10px;color:#5a6a7c}.lp .dt .v{font-family:var(--num);font-size:14px;font-weight:600;line-height:1.2}.lp .dt.post{border-left:3px solid #22405f}.lp .dt .tg{font-weight:700;color:#22405f}'
+ +'.lp .ln{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.lp .ln a{font-size:11px;font-weight:700;color:#fff;background:#22405f;border-radius:6px;padding:4px 8px;text-decoration:none;white-space:nowrap}.lp .ln a.sub{background:#fff;color:#22405f;border:1px solid #22405f}.lp .ln i{font-size:11px;color:#5a6a7c;font-style:normal}'
+ +'.lp .ch{display:grid;grid-template-columns:minmax(0,1fr) 108px 120px 150px;gap:10px;padding:2px 12px;font-size:10px;color:#5a6a7c}.lp .nt{font-size:11px;color:#5a6a7c}';
+function libBlocks(c){
+  const rows=libRows(c.id),months=[...new Set(rows.map(v=>v.month))].sort().reverse(),nowM=ymOf(TODAY);
+  const next=rows.filter(v=>v.date&&v.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const tile=(l,v)=>'<div class="box"><span class="l">'+l+'</span><span class="v">'+v+'</span></div>';
+  const dt=(cls,k,d,tg)=>'<div class="dt '+cls+'"><span class="k">'+k+(tg?' <span class="tg">'+tg+'</span>':'')+'</span><span class="v">'+(d?dlabel(d):'未定')+'</span></div>';
+  const head='<div class="hd"><div class="k">VIDEO LIBRARY</div><div class="n">'+esc(c.name)+' 様</div><div class="u">制作した動画の一覧 ・ '+TODAY.replace(/-/g,'/')+' 時点</div></div>'
+    +'<div class="t4">'+tile('これまでの制作本数',rows.length+'本')+tile('今月（'+Number(nowM.slice(5))+'月）の本数',rows.filter(v=>v.month===nowM).length+'本')+tile('完成した動画',rows.filter(v=>v.st==='done').length+'本')+tile('次の投稿予定',next?next.date.slice(5).replace('-','/'):'—')+'</div>'
+    +'<div class="nt">青いボタン（「動画を見る」など）を押すと、その動画のリンクが開きます。</div>';
+  const blocks=[];
+  months.forEach(m=>{const rs=rows.filter(v=>v.month===m).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    blocks.push({mh:1,h:'<div class="mh"><b>'+mlabel(m)+'</b><span><b>'+rs.length+'</b> 本</span></div><div class="ch"><span>動画</span><span>完成（予定）日</span><span>投稿日</span><span></span></div>'});
+    rs.forEach(v=>blocks.push({h:'<div class="rw"><div class="tt"><b>'+esc(v.title)+'</b><span class="st '+v.st+'">'+LIB_ST[v.st]+'</span></div>'+dt('due',v.st==='done'?'完成日':'完成予定日',v.due)+dt('post','投稿日',v.date,v.date?(v.date<=TODAY?'投稿済':'予定'):'')
+      +'<div class="ln">'+(v.links.length?v.links.map((l,j)=>'<a'+(j?' class="sub"':'')+' href="'+esc(l.u)+'">'+esc(l.k)+'</a>').join(''):'<i>リンク準備中</i>')+'</div></div>'}))});
+  return {head,blocks};
+}
+async function libPdfBase64(c){
+  if(!window.jspdf||!window.html2canvas)throw new Error('lib');
+  const {head,blocks}=libBlocks(c);
+  const host=document.createElement('div');host.style.cssText='position:fixed;left:-10000px;top:0';host.innerHTML='<style>'+PDF_CSS+LIB_CSS+'</style>';document.body.appendChild(host);
+  const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});const MM=210/794;
+  try{
+    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+    // lay blocks out page by page, measuring as we go so nothing is cut at the bottom
+    const pages=[];let el=null,body=null;
+    const newPage=first=>{el=document.createElement('div');el.className='pdfp';body=document.createElement('div');body.className='lp';body.innerHTML=first?head:'<div class="hd"><div class="u">'+esc(c.name)+' 様 ・ 制作した動画の一覧（続き）</div></div>';el.appendChild(body);host.appendChild(el);pages.push(el)};
+    const fits=()=>body.scrollHeight<=1123-40;
+    newPage(true);
+    for(let i=0;i<blocks.length;i++){
+      const tmp=document.createElement('div');tmp.innerHTML=blocks[i].h;const nodes=[...tmp.childNodes];nodes.forEach(n=>body.appendChild(n));
+      // a month heading must not sit alone at the bottom of a page
+      let ok=fits();if(ok&&blocks[i].mh&&blocks[i+1]&&!blocks[i+1].mh){const t2=document.createElement('div');t2.innerHTML=blocks[i+1].h;const n2=t2.firstChild;body.appendChild(n2);ok=fits();n2.remove()}
+      if(!ok){nodes.forEach(n=>n.remove());newPage(false);nodes.forEach(n=>body.appendChild(n))}
+    }
+    for(let i=0;i<pages.length;i++){
+      const pg=pages[i];const foot=document.createElement('div');foot.className='foot';foot.innerHTML='<span>'+esc(company()||'')+'</span><span>'+(i+1)+' / '+pages.length+'</span>';pg.appendChild(foot);
+      const base=pg.getBoundingClientRect();
+      const links=[...pg.querySelectorAll('a[href]')].map(a=>{const r=a.getBoundingClientRect();return{x:(r.left-base.left)*MM,y:(r.top-base.top)*MM,w:r.width*MM,h:r.height*MM,url:a.getAttribute('href')}});
+      const cv=await window.html2canvas(pg,{scale:2,backgroundColor:'#ffffff',logging:false});
+      if(i)doc.addPage();doc.addImage(cv.toDataURL('image/jpeg',0.85),'JPEG',0,0,210,297);
+      links.forEach(l=>doc.link(l.x,l.y,l.w,l.h,{url:l.url}));
+    }
+  }finally{host.remove()}
+  return doc.output('datauristring').split(',')[1];
+}
+const payloadOf=r=>{let p=r&&r.payload;if(typeof p==='string'){try{p=JSON.parse(p)}catch(_){}}return p&&typeof p==='object'?p:{}};
+const libFolderUrl=c=>c.driveFolderId?'https://drive.google.com/drive/folders/'+c.driveFolderId:'';
+function drivePdfChip(c){
+  if(S.libPdfBusy&&S.libPdfBusy[c.id])return'<span class="chip warn">PDF作成中…</span>';
+  if(!c.driveFolderId)return'';
+  return'<a class="hint" href="'+esc(libFolderUrl(c))+'" target="_blank" rel="noopener">ドライブ ↗</a>'+(c.drivePdfAt?' <span class="hint">'+dlabel(c.drivePdfAt.slice(0,10))+'保存</span>':'')
+    +(c.driveShared===false?' <span class="chip warn" title="ドライブでこのフォルダを「リンクを知っている全員」に共有すると、お客様がログインなしで見られます">共有設定がまだです</span>':'');
+}
+async function libPdfToDrive(ids){
+  if(S.libPdfBusy&&Object.keys(S.libPdfBusy).length){toast('いまPDFを作成中です');return}
+  const targets=(ids==='all'?activeClients():ids.map(cById)).filter(libPdfOk);
+  if(!targets.length){toast('PDFにできる動画がありません');return}
+  const mcp=window.claude&&window.claude.use?await window.claude.use('mcp'):null;
+  if(!mcp){toast('この表示ではGoogleドライブにつなげません');return}
+  const call=async(tool,input)=>payloadOf(await mcp.callTool('Google Drive',tool,input,{cache:false}));
+  const errMsg=e=>{const c=e&&e.code;return c==='server_not_connected'?'Google Driveが未接続です（claude.aiの設定 → コネクタ）':c==='needs_reauth'?'Google Driveの接続が切れています（claude.aiの設定 → コネクタでつなぎ直し）':c==='not_in_manifest'||c==='consent_required'?'このページでのGoogle Driveの利用が許可されていません（ページの権限メニュー）':c==='tool_error'?'ドライブに保存できませんでした':'保存できませんでした（'+(c||'error')+'）'};
+  S.libPdfBusy={};targets.forEach(c=>S.libPdfBusy[c.id]=1);render();
+  let ok=0,needShare=0;
+  try{
+    let root=mainSettings().libraryFolder;
+    if(!root){const r=await call('create_file',{title:'お客様用 動画一覧PDF',contentMimeType:FOLDER_MIME});root=r.id;const ms=Object.assign({},mainSettings(),{libraryFolder:root});delete ms.id;await S.db.collection('settings').doc('main').set(ms)}
+    for(let i=0;i<targets.length;i++){
+      const c=targets[i];toast('動画一覧PDFを作成中… '+(i+1)+' / '+targets.length+'（'+c.name+'）');
+      let b64;try{b64=await libPdfBase64(c)}catch(e){toast('PDFを作成できませんでした。ページを開き直してください');break}
+      let folder=c.driveFolderId;
+      if(!folder){const r=await call('create_file',{title:c.name+' 様 動画一覧',contentMimeType:FOLDER_MIME,parentId:root});folder=r.id}
+      const f=await call('create_file',{title:c.name.replace(/[\\/:*?"<>|]/g,'')+'様_動画一覧_'+TODAY+'.pdf',parentId:folder,base64Content:b64,contentMimeType:'application/pdf',disableConversionToGoogleType:true});
+      if(!f.id)throw{code:'tool_error'};
+      if(c.drivePdfId&&c.drivePdfId!==f.id){try{await call('trash_file',{fileId:c.drivePdfId})}catch(_){}}
+      let shared=null;try{const pm=await call('get_file_permissions',{fileId:folder});shared=(pm.permissions||[]).some(x=>x.type==='anyone')}catch(_){}
+      if(shared===false)needShare++;
+      await S.db.collection('clients').doc(c.id).update({driveFolderId:folder,drivePdfId:f.id,drivePdfAt:new Date().toISOString(),driveShared:shared});
+      delete S.libPdfBusy[c.id];ok++;render();
+    }
+    toast(ok+'社の動画一覧PDFをドライブに保存しました'+(needShare?'（'+needShare+'社はフォルダの共有設定がまだです）':''));
+  }catch(e){toast(errMsg(e))}
+  finally{S.libPdfBusy={};render()}
+}
+
 /* ---------- render ---------- */
 const VIEWS={dash:viewDash,prod:viewProd,cal:viewCal,ed:viewEd,rep:viewRep,cli:viewCli};
 function render(){
@@ -1091,6 +1199,8 @@ document.addEventListener('click',async e=>{
     case'restore':restore(id);{const el=document.querySelector('.toast');if(el)el.hidden=true}break;
     case'libOne':requestLibrary([id]);break;
     case'libAll':requestLibrary('all');break;
+    case'drivePdf':libPdfToDrive([id]);break;
+    case'drivePdfAll':libPdfToDrive('all');break;
     case'gcalSync':syncGcal(true);break;
     case'fetchOne':requestFetch([id]);break;
     case'fetchAll':requestFetch('all');break;

@@ -72,6 +72,24 @@ header .upd{font-size:12px;color:var(--muted)}
 .scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
 .empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:12px}
 footer{font-size:12px;color:var(--muted)}
+/* PDF / printing: light palette, every month open, no filter bar, rows kept whole */
+@page{size:A4;margin:12mm 10mm}
+@media print{
+  :root,:root:not([data-theme="light"]){--bg:#fff;--surface:#fff;--sunk:#f1f3f6;--ink:#1d2a38;--muted:#5d6874;--line:#d9dde3;--accent:#22405f;--accent-ink:#fff;--done:#1f7a52;--wait:#a86a00;--wip:#3b6aa0;color-scheme:light}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:12px}
+  .wrap{max-width:none;padding:0;gap:14px}
+  .bar{display:none}
+  .row{grid-template-columns:minmax(0,1fr) 260px 170px;padding:8px 12px;break-inside:avoid}
+  .colhead{grid-template-columns:minmax(0,1fr) 260px 170px}
+  .month{break-inside:auto}
+  .month summary{break-after:avoid}
+  .month summary::after{content:none}
+  .scroll{overflow:visible}
+  .sns{break-before:page}
+  .sns tr{break-inside:avoid}
+  .pdfonly{display:block}
+}
+.pdfonly{display:none}
 </style>
 
 <div class="wrap">
@@ -93,7 +111,7 @@ footer{font-size:12px;color:var(--muted)}
   </div>
   <main id="list"></main>
   <section class="sns" id="sns" hidden></section>
-  <footer>動画のリンクはGoogleドライブ等の共有リンクです。開けない場合は担当者までご連絡ください。</footer>
+  <footer>動画のリンクはGoogleドライブ等の共有リンクです。開けない場合は担当者までご連絡ください。<span class="pdfonly">PDF内の「動画を見る」などのボタンを押すと、その動画が開きます。</span></footer>
 </div>
 
 <script id="data" type="application/json">__DATA__</script>
@@ -128,7 +146,7 @@ function render(){
   if(!vs.length){list.innerHTML='<div class="empty">条件に合う動画はありません。</div>';return}
   const ms=[...new Set(vs.map(v=>v.month))].sort().reverse();
   list.innerHTML=ms.map((m,i)=>{const rows=vs.filter(v=>v.month===m).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-    return'<details class="month"'+(i<3||q||mF?' open':'')+'><summary><h2>'+ml(m)+'</h2><span class="cnt"><b>'+rows.length+'</b> 本</span></summary><div class="colhead"><span>動画</span><span>日程</span><span></span></div>'
+    return'<details class="month"'+(D.print||i<3||q||mF?' open':'')+'><summary><h2>'+ml(m)+'</h2><span class="cnt"><b>'+rows.length+'</b> 本</span></summary><div class="colhead"><span>動画</span><span>日程</span><span></span></div>'
       +rows.map(v=>'<div class="row"><div class="t"><b>'+esc(v.title)+'</b><span class="st '+v.st+'">'+ST[v.st]+'</span></div><div class="dates">'+dateBox('due',v.st==='done'?'完成日':'完成予定日',v.due)+dateBox('post','投稿日',v.date,v.date?(v.date<=D.today?'投稿済':'予定'):'')+'</div><div class="links">'
         +(v.links.length?v.links.map((l,j)=>'<a'+(j?' class="sub"':'')+' href="'+esc(l.u)+'" target="_blank" rel="noopener">'+esc(l.k)+'</a>').join(''):'<span class="none">リンク準備中</span>')+'</div></div>').join('')+'</details>'}).join('<div style="height:12px"></div>');
 }

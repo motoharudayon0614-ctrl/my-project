@@ -99,6 +99,11 @@ def build(dump, out_dir):
         path = os.path.join(out_dir, cid + ".html")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(html)
+        # same page with every month expanded, for pdf.py to print
+        data["print"] = True
+        blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+        with open(os.path.join(out_dir, cid + ".print.html"), "w", encoding="utf-8") as fh:
+            fh.write(tpl.replace("__TITLE__", name + " 動画ライブラリ").replace("__DATA__", blob))
         made.append((cid, name, len(rows), path))
     return made
 
