@@ -66,6 +66,7 @@ td.r,th.r{text-align:right}
 td.wrap{white-space:normal;min-width:180px}
 tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .lvtop{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.lvbig{display:grid;justify-items:center;min-width:120px;padding:10px 16px;border-radius:12px;border:2px solid currentColor}.lvbig .k{font-size:11px;color:var(--muted)}.lvbig .v{font-family:var(--num);font-size:44px;font-weight:700;line-height:1}.lvbig .t{font-size:12px;font-weight:700}.lvtxt{flex:1 1 300px;display:grid;gap:3px;font-size:13px}.lvscale{font-size:11px;color:var(--muted);margin-top:4px}.lv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-family:var(--num);font-weight:700;font-size:13px;color:#fff;margin-right:3px}.lv-S{background:#7a3fc4;color:#7a3fc4}.lv-A{background:#1d8656;color:#1d8656}.lv-B{background:#2f6db0;color:#2f6db0}.lv-C{background:#c98a12;color:#c98a12}.lv-D{background:#c3372d;color:#c3372d}span.lv{color:#fff}.lvbig.lv-S,.lvbig.lv-A,.lvbig.lv-B,.lvbig.lv-C,.lvbig.lv-D{background:transparent}.cbar{position:relative;min-width:110px;height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}.cbar i{position:absolute;left:0;top:0;bottom:0;opacity:.85}.cbar b{position:relative;font-family:var(--num);font-size:12px;padding-left:6px;line-height:18px}
+.avggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}.avgcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;background:var(--surface)}.avgh{font-weight:700}.avgbig{display:grid;gap:0}.avgbig .k{font-size:12px;color:var(--muted)}.avgbig .v{font-family:var(--num);font-size:34px;font-weight:700;line-height:1.1}.avgbig .v small{font-size:14px;margin-left:2px;color:var(--muted)}.avgcmp{display:grid;gap:5px}.avgrow{display:grid;grid-template-columns:minmax(0,13em) minmax(60px,1fr) 14em;gap:8px;align-items:center;font-size:12px}.avgrow .l{color:var(--muted)}.avgrow.me .l{color:var(--ink);font-weight:700}.avgrow .avgbar{height:10px;background:var(--sunk);border-radius:3px;overflow:hidden}.avgrow .avgbar i{display:block;height:100%;background:var(--muted);opacity:.55;border-radius:3px}.avgrow.me .avgbar i{opacity:1}.avgrow .n{white-space:nowrap;text-align:right}
 .reftab tr.me-row td{background:color-mix(in srgb,var(--accent) 8%,transparent)}.refsec{display:grid;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid currentColor;line-height:1.6;white-space:nowrap}
 .chip.basic{color:var(--basic)} .chip.pro{color:var(--pro)} .chip.custom{color:var(--muted)}
@@ -622,6 +623,41 @@ function analysis(cid,m){
     out.push(r.label+'は契約'+r.q+'本に対して'+r.a+'本の投稿'+(v.diff>0?'で、'+v.diff+'本の超過です。':v.diff<0?'で、'+(-v.diff)+'本不足しています。':'で、契約どおりです。'))});
   return out;
 }
+/* ---------- 再生数の平均（今月の1本あたり平均と、前月・競合・運用アカウント・業界の目安との比較＋動画ごとの棒グラフ） ---------- */
+function avgData(cid,m,p){
+  const d=metricsFor(cid,m);const x=platMetrics(d,p,cid,m);if(!x||!isNum(x.vpp))return null;
+  const vs=vidsOf(d,p).filter(v=>isNum(v.views)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const y=platMetrics(metricsFor(cid,madd(m,-1)),p,cid,madd(m,-1))||{};
+  const G=refData(cid,m);const g=G&&G.find(k=>k.p===p);const pr=peerStats(cid,p,m);const B=BENCH[p];
+  const cmp=[{k:'前月の平均',v:y.vpp},{k:'競合・参考アカウントの平均',v:g&&g.avg.vpp},{k:(pr?pr.label:'当社の運用アカウント')+'の中央値',v:pr&&pr.vpp},
+    {k:'業界の目安（フォロワー'+fmt(x.followers)+'人のアカウント）',v:B&&isNum(x.followers)?x.followers*B.vr.avg:null}].filter(r=>isNum(r.v)&&r.v>0);
+  return{x,vs,avg:x.vpp,med:median(vs.map(v=>v.views)),cmp};
+}
+function avgSvg(A,p){
+  const vs=A.vs;if(vs.length<2)return'';
+  const W=640,H=150,L=8,R=8,T=18,Bm=18;const max=Math.max(A.avg,...vs.map(v=>v.views))*1.08;
+  const bw=Math.min(36,(W-L-R)/vs.length-4),gap=((W-L-R)-bw*vs.length)/vs.length;const yy=v=>T+(H-T-Bm)*(1-v/max);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="動画ごとの再生数と平均"><line x1="'+L+'" x2="'+(W-R)+'" y1="'+(H-Bm)+'" y2="'+(H-Bm)+'" style="stroke:var(--line)"/>';
+  vs.forEach((v,i)=>{const x=L+gap/2+i*(bw+gap),y=yy(v.views),hi=v.views>=A.avg;
+    s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(1,H-Bm-y).toFixed(1)+'" rx="3" style="fill:var(--'+p+');opacity:'+(hi?1:.38)+'"><title>'+esc((v.title||'(無題)').slice(0,40))+'　'+dlabel(v.date)+'　'+fmt(v.views)+'回（平均の'+fmt(v.views/A.avg,1)+'倍）</title></rect>';
+    if(vs.length<=16)s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-4)+'" text-anchor="middle" style="fill:var(--muted);font-size:10px">'+(v.date||'').slice(5).replace('-','/')+'</text>'});
+  const ay=yy(A.avg);
+  s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+ay.toFixed(1)+'" y2="'+ay.toFixed(1)+'" stroke-dasharray="5 4" style="stroke:var(--ink)" stroke-width="1.5"/><text x="'+(W-R)+'" y="'+(ay-5).toFixed(1)+'" text-anchor="end" style="fill:var(--ink);font-size:11px;font-weight:700">平均 '+fmt(A.avg)+'回</text></svg>';
+  return'<div class="chart">'+s+'</div>';
+}
+function avgCard(cid,m,p,pdf){
+  const A=avgData(cid,m,p);if(!A)return'';
+  const all=[{k:'今月の平均',v:A.avg,me:1}].concat(A.cmp);const max=Math.max(...all.map(r=>r.v));
+  const up=A.vs.filter(v=>v.views>=A.avg).length,dn=A.vs.length-up;
+  return'<div class="avgcard">'+(pdf?'':'<div class="avgh"><b style="color:var(--'+p+')">■</b> '+RP[p].name+'</div>')
+    +'<div class="avgbig"><span class="k">1本あたりの平均再生数</span><span class="v">'+fmt(A.avg)+'<small>回</small></span><span class="hint">'+fmt(A.x.posts)+'本の合計 '+fmt(A.x.views)+'回 ÷ '+fmt(A.x.posts)+'本'+(isNum(A.med)&&A.vs.length>2?' ・ 真ん中の動画（中央値）は '+fmt(A.med)+'回':'')+'</span></div>'
+    +'<div class="avgcmp">'+all.map(r=>'<div class="avgrow'+(r.me?' me':'')+'"><span class="l">'+esc(r.k)+'</span><span class="avgbar"><i style="width:'+(r.v/max*100).toFixed(1)+'%;'+(r.me?'background:var(--'+p+')':'')+'"></i></span><span class="n num">'+fmt(r.v)+'回'+(r.me?'':' <span class="'+(A.avg>=r.v?'up':'down')+'">'+(A.avg>=r.v?'今月が'+fmt(A.avg/r.v,1)+'倍':'今月が'+fmt((1-A.avg/r.v)*100,0)+'%少ない')+'</span>')+'</span></div>').join('')+'</div>'
+    +(A.vs.length>1?'<div class="hint" style="margin-top:4px">動画ごとの再生数（点線＝平均。濃い棒が平均より多い動画 '+up+'本、薄い棒が少ない動画 '+dn+'本）</div>'+avgSvg(A,p):'')+'</div>';
+}
+function avgHtml(cid,m){
+  const d=metricsFor(cid,m);if(!d)return'';const cards=reportPlats(d).map(p=>avgCard(cid,m,p,false)).filter(Boolean);
+  return cards.length?'<div class="sec"><h3>再生数の平均</h3><div class="avggrid">'+cards.join('')+'</div><p class="hint" style="margin:0">平均＝その月に投稿した動画の再生数の合計 ÷ 本数。バズった1本に引っぱられることがあるので、真ん中の動画の再生数（中央値）も併記しています。業界の目安＝このアカウントのフォロワー数 × 一般的な倍率（Instagram 0.5倍・TikTok 1.0倍・YouTubeショート 0.8倍・YouTube横動画 0.2倍）。</p></div>':'';
+}
 /* ---------- 競合・参考アカウントとの比較（クライアントごとに登録した最大3アカウントを同じ方法で取得） ---------- */
 function refMetrics(r,p){
   const b=baseOf(p);const blk=r[b]||{};const vs=(r.videos||[]).filter(v=>RP[p].kind?rkey(v)===p:v.platform===p);
@@ -789,6 +825,7 @@ function viewRep(){
     +'<div class="tile"><span class="lbl">投稿本数</span><span class="val">'+fmt(posts)+'</span><span class="sub num">'+deltaHtml(posts,pposts)+'</span></div>'
     +'<div class="tile"><span class="lbl">総再生数</span><span class="val">'+fmt(sumV)+'</span><span class="sub num">'+deltaHtml(sumV,sumPV||null)+'</span></div>'
     +'<div class="tile"><span class="lbl">1本あたり再生数</span><span class="val">'+fmt(posts?sumV/posts:null)+'</span><span class="sub num">'+deltaHtml(posts?sumV/posts:null,pposts?sumPV/pposts:null)+'</span></div></div>';
+  h+=avgHtml(c.id,m);
   h+=refHtml(c.id,m);
   h+=levelHtml(c.id,m);
   h+=contractHtml(c.id,m);
@@ -1069,7 +1106,7 @@ const PDF_CSS='.pdfp{width:794px;height:1123px;background:#fff;color:#17283b;fon
  +'.pdfp table{width:100%;border-collapse:collapse;font-size:12px}.pdfp th{background:#f1f4f8;color:#5a6a7c;font-weight:500;font-size:11px;text-align:left;padding:7px 8px}.pdfp td{padding:7px 8px;border-bottom:1px solid #d9e0e8}.pdfp td.r,.pdfp th.r{text-align:right;font-family:var(--num)}'
  +'.pdfp .up{color:#1d8656}.pdfp .down{color:#c3372d}.pdfp .flat{color:#5a6a7c}.pdfp .note{white-space:pre-wrap;background:#f1f4f8;border-radius:8px;padding:14px;font-size:13px;line-height:1.8}'
  +'.pdfp .chart{width:440px}.pdfp .chart svg{width:440px;height:auto;display:block}.pdfp .chart text{font-family:var(--num);font-size:10px}.pdfp .legend{display:flex;gap:14px;font-size:11px;color:#5a6a7c}.pdfp .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}'
- +'.pdfp .lvtop{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.lvbig{display:grid;justify-items:center;min-width:120px;padding:10px 16px;border-radius:12px;border:2px solid currentColor}.lvbig .k{font-size:11px;color:var(--muted)}.lvbig .v{font-family:var(--num);font-size:44px;font-weight:700;line-height:1}.lvbig .t{font-size:12px;font-weight:700}.lvtxt{flex:1 1 300px;display:grid;gap:3px;font-size:13px}.lvscale{font-size:11px;color:var(--muted);margin-top:4px}.lv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-family:var(--num);font-weight:700;font-size:13px;color:#fff;margin-right:3px}.lv-S{background:#7a3fc4;color:#7a3fc4}.lv-A{background:#1d8656;color:#1d8656}.lv-B{background:#2f6db0;color:#2f6db0}.lv-C{background:#c98a12;color:#c98a12}.lv-D{background:#c3372d;color:#c3372d}span.lv{color:#fff}.lvbig.lv-S,.lvbig.lv-A,.lvbig.lv-B,.lvbig.lv-C,.lvbig.lv-D{background:transparent}.cbar{position:relative;min-width:110px;height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}.cbar i{position:absolute;left:0;top:0;bottom:0;opacity:.85}.cbar b{position:relative;font-family:var(--num);font-size:12px;padding-left:6px;line-height:18px}.pdfp .lvsec{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}.pdfp .refsec{display:grid;gap:8px;grid-template-columns:minmax(0,1fr)}.pdfp .reftab{table-layout:fixed}.pdfp .reftab td:first-child,.pdfp .reftab th:first-child{width:30%}.pdfp .reftab .chip{font-size:9px!important;padding:0 4px}.pdfp .reftab th,.pdfp .reftab td{padding:5px 5px;font-size:11px;white-space:normal}.pdfp .reftab tr.me-row td{background:#eef3f9}.pdfp .refsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvtab th,.pdfp .lvtab td{padding:6px 5px;font-size:11px;white-space:normal}.pdfp .lvtab .cbar{min-width:0;width:100px}.pdfp .lvsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvsec p.hint{line-height:1.6}'
+ +'.pdfp .lvtop{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.lvbig{display:grid;justify-items:center;min-width:120px;padding:10px 16px;border-radius:12px;border:2px solid currentColor}.lvbig .k{font-size:11px;color:var(--muted)}.lvbig .v{font-family:var(--num);font-size:44px;font-weight:700;line-height:1}.lvbig .t{font-size:12px;font-weight:700}.lvtxt{flex:1 1 300px;display:grid;gap:3px;font-size:13px}.lvscale{font-size:11px;color:var(--muted);margin-top:4px}.lv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-family:var(--num);font-weight:700;font-size:13px;color:#fff;margin-right:3px}.lv-S{background:#7a3fc4;color:#7a3fc4}.lv-A{background:#1d8656;color:#1d8656}.lv-B{background:#2f6db0;color:#2f6db0}.lv-C{background:#c98a12;color:#c98a12}.lv-D{background:#c3372d;color:#c3372d}span.lv{color:#fff}.lvbig.lv-S,.lvbig.lv-A,.lvbig.lv-B,.lvbig.lv-C,.lvbig.lv-D{background:transparent}.cbar{position:relative;min-width:110px;height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}.cbar i{position:absolute;left:0;top:0;bottom:0;opacity:.85}.cbar b{position:relative;font-family:var(--num);font-size:12px;padding-left:6px;line-height:18px}.pdfp .lvsec{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}.pdfp .avggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}.avgcard{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;background:var(--surface)}.avgh{font-weight:700}.avgbig{display:grid;gap:0}.avgbig .k{font-size:12px;color:var(--muted)}.avgbig .v{font-family:var(--num);font-size:34px;font-weight:700;line-height:1.1}.avgbig .v small{font-size:14px;margin-left:2px;color:var(--muted)}.avgcmp{display:grid;gap:5px}.avgrow{display:grid;grid-template-columns:minmax(0,13em) minmax(60px,1fr) 14em;gap:8px;align-items:center;font-size:12px}.avgrow .l{color:var(--muted)}.avgrow.me .l{color:var(--ink);font-weight:700}.avgrow .avgbar{height:10px;background:var(--sunk);border-radius:3px;overflow:hidden}.avgrow .avgbar i{display:block;height:100%;background:var(--muted);opacity:.55;border-radius:3px}.avgrow.me .avgbar i{opacity:1}.avgrow .n{white-space:nowrap;text-align:right}.pdfp .avgcard{padding:10px 12px}.pdfp .avgbig .v{font-size:28px}.pdfp .avgcard .hint{font-size:10px;color:#5a6a7c}.pdfp .refsec{display:grid;gap:8px;grid-template-columns:minmax(0,1fr)}.pdfp .reftab{table-layout:fixed}.pdfp .reftab td:first-child,.pdfp .reftab th:first-child{width:30%}.pdfp .reftab .chip{font-size:9px!important;padding:0 4px}.pdfp .reftab th,.pdfp .reftab td{padding:5px 5px;font-size:11px;white-space:normal}.pdfp .reftab tr.me-row td{background:#eef3f9}.pdfp .refsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvtab th,.pdfp .lvtab td{padding:6px 5px;font-size:11px;white-space:normal}.pdfp .lvtab .cbar{min-width:0;width:100px}.pdfp .lvsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvsec p.hint{line-height:1.6}'
  +'.pdfp .foot{position:absolute;left:48px;right:48px;bottom:24px;display:flex;justify-content:space-between;font-size:10px;color:#5a6a7c;border-top:1px solid #d9e0e8;padding-top:8px}';
 function pdfPages(cid,m){
   const c=cById(cid),d=metricsFor(cid,m),pm=madd(m,-1),pd=metricsFor(cid,pm);if(!c||!d)return null;
@@ -1102,9 +1139,12 @@ function pdfPages(cid,m){
     // Numbers + chart on one page, the video list on its own page(s), so nothing runs past the A4 edge.
     const head='<div class="phead" style="--pc:var(--'+p+')"><i></i><b>'+def.name+'</b><span>'+esc(c.name)+' 様 ／ '+mlabel(m)+'</span></div>';
     pages.push(head+'<div class="body"><div class="t3">'+ks.join('')+'</div><h4>6ヶ月の推移</h4>'+trendSvg(cid,p,m)+'</div>');
-    const PER=24;
-    for(let k=0;k<all.length;k+=PER)
-      pages.push(head+'<div class="body">'+vtable(all.slice(k,k+PER),'今月投稿した動画（'+all.length+'本）'+(k?'（続き）':''))+'</div>');
+    const av=avgCard(cid,m,p,true);
+    // the first video page opens with the average card, so it holds fewer rows
+    const PER=24,FIRST=av?12:PER;
+    if(av&&!all.length)pages.push(head+'<div class="body"><h4>再生数の平均</h4>'+av+'</div>');
+    for(let k=0;k<all.length;k+=(k?PER:FIRST))
+      pages.push(head+'<div class="body">'+(k?'':av?'<h4>再生数の平均</h4>'+av:'')+vtable(all.slice(k,k+(k?PER:FIRST)),'今月投稿した動画（'+all.length+'本）'+(k?'（続き）':''))+'</div>');
   }
   return pages.map((h,i)=>h+'<div class="foot"><span>'+esc(company()||'SNS運用 月次レポート')+'</span><span>発行日 '+issued+' ・ '+(i+1)+' / '+pages.length+'</span></div>');
 }
