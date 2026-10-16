@@ -234,8 +234,38 @@ def run_actor(actor, inp, token, max_wait=1800):
 
 # ---------- main ----------
 
+REF_SEP = "~ref"
+MAX_REFS = 3
+
+
+def expand_refs(clients):
+    """Competitor / reference accounts (client["refs"]) are fetched like clients under ids "<cid>~ref<n>"."""
+    out = []
+    for c in clients:
+        for i, r in enumerate((c.get("refs") or [])[:MAX_REFS]):
+            if any((r.get(p) or "").strip() for p in ("ig", "tt", "yt")):
+                out.append({"id": "%s%s%d" % (c["id"], REF_SEP, i), "name": r.get("name") or "参考%d" % (i + 1),
+                            "ig": r.get("ig"), "tt": r.get("tt"), "yt": r.get("yt")})
+    return out
+
+
+def ref_summary(doc, name):
+    """What a report needs about a reference account: the platform totals and its 3 most-viewed videos."""
+    out = {"name": name}
+    for p in ("ig", "tt", "yt"):
+        if p in doc:
+            out[p] = doc[p]
+    vids = [v for v in doc.get("videos") or [] if v.get("views") is not None]
+    out["top"] = sorted(vids, key=lambda v: v["views"], reverse=True)[:3]
+    out["videos"] = [{k: v.get(k) for k in ("platform", "kind", "date", "views", "likes", "comments", "shares", "saves") if v.get(k) is not None}
+                     for v in doc.get("videos") or []]
+    return out
+
+
 def collect(clients, month, token, log=print):
-    clients = [c for c in clients if c.get("active", True) is not False]
+    clients = [c for c in clients if c.get("active", True) is not False and REF_SEP not in c["id"]]
+    owners = {c["id"]: c for c in clients}
+    clients = clients + expand_refs(clients)
     ig = {c["id"]: ig_user(c.get("ig")) for c in clients}
     tt = {c["id"]: tt_user(c.get("tt")) for c in clients}
     yt = {c["id"]: yt_url(c.get("yt")) for c in clients}
@@ -294,7 +324,29 @@ def collect(clients, month, token, log=print):
             doc["videos"] += inm
         if any(k in doc for k in ("ig", "tt", "yt")):
             docs.append({"docId": "%s_%s" % (c["id"], month), "data": doc})
-    return docs, errors
+    # fold reference accounts into their client's doc as `refs`
+    byid = {d["docId"]: d for d in docs}
+    out = []
+    for d in docs:
+        cid = d["data"]["clientId"]
+        if REF_SEP not in cid:
+            out.append(d)
+    for c in owners.values():
+        refs = []
+        for r in expand_refs([c]):
+            rd = byid.get("%s_%s" % (r["id"], month))
+            if rd:
+                refs.append(ref_summary(rd["data"], r["name"]))
+        if not refs:
+            continue
+        key = "%s_%s" % (c["id"], month)
+        own = next((d for d in out if d["docId"] == key), None)
+        if not own:
+            own = {"docId": key, "data": {"clientId": c["id"], "month": month, "source": "apify",
+                                          "collectedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}}
+            out.append(own)
+        own["data"]["refs"] = refs
+    return out, errors
 
 
 def this_month(today=None):

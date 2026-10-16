@@ -66,6 +66,7 @@ td.r,th.r{text-align:right}
 td.wrap{white-space:normal;min-width:180px}
 tr.late td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .lvtop{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.lvbig{display:grid;justify-items:center;min-width:120px;padding:10px 16px;border-radius:12px;border:2px solid currentColor}.lvbig .k{font-size:11px;color:var(--muted)}.lvbig .v{font-family:var(--num);font-size:44px;font-weight:700;line-height:1}.lvbig .t{font-size:12px;font-weight:700}.lvtxt{flex:1 1 300px;display:grid;gap:3px;font-size:13px}.lvscale{font-size:11px;color:var(--muted);margin-top:4px}.lv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-family:var(--num);font-weight:700;font-size:13px;color:#fff;margin-right:3px}.lv-S{background:#7a3fc4;color:#7a3fc4}.lv-A{background:#1d8656;color:#1d8656}.lv-B{background:#2f6db0;color:#2f6db0}.lv-C{background:#c98a12;color:#c98a12}.lv-D{background:#c3372d;color:#c3372d}span.lv{color:#fff}.lvbig.lv-S,.lvbig.lv-A,.lvbig.lv-B,.lvbig.lv-C,.lvbig.lv-D{background:transparent}.cbar{position:relative;min-width:110px;height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}.cbar i{position:absolute;left:0;top:0;bottom:0;opacity:.85}.cbar b{position:relative;font-family:var(--num);font-size:12px;padding-left:6px;line-height:18px}
+.reftab tr.me-row td{background:color-mix(in srgb,var(--accent) 8%,transparent)}.refsec{display:grid;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid currentColor;line-height:1.6;white-space:nowrap}
 .chip.basic{color:var(--basic)} .chip.pro{color:var(--pro)} .chip.custom{color:var(--muted)}
 .chip.bad{color:var(--bad)} .chip.warn{color:var(--warn)} .chip.good{color:var(--good)} .chip.muted{color:var(--muted)}
@@ -357,14 +358,17 @@ function editClient(c){
     +'<div class="full hint">下のURLを登録すると、毎月1日にフォロワー数と動画ごとの再生数・いいね・コメントを自動で取得します（ログイン不要）。</div>'+field({k:'ig',label:'Instagram アカウントURL',v:c.ig,ph:'https://www.instagram.com/…',full:true})
     +field({k:'tt',label:'TikTok アカウントURL',v:c.tt,ph:'https://www.tiktok.com/@…',full:true})
     +field({k:'yt',label:'YouTube チャンネルURL',v:c.yt,ph:'https://www.youtube.com/@…',full:true})
+    +'<div class="full hint" style="margin-top:6px"><b>競合・参考アカウント（最大3つ）</b>：同じ業種のライバル店や、目標にしたいアカウントを登録すると、毎月同じ方法で数字を取得してレポートで比べます。</div>'
+    +[0,1,2].map(i=>{const r=(c.refs||[])[i]||{};return field({k:'ref'+i+'_name',label:'参考'+(i+1)+' の名前',v:r.name,ph:'例：〇〇モータース'})+field({k:'ref'+i+'_ig',label:'Instagram',v:r.ig,ph:'https://www.instagram.com/…'})+field({k:'ref'+i+'_tt',label:'TikTok',v:r.tt,ph:'https://www.tiktok.com/@…'})+field({k:'ref'+i+'_yt',label:'YouTube',v:r.yt,ph:'https://www.youtube.com/@…'})}).join('')
     +field({k:'contact',label:'担当者・連絡先メモ',type:'textarea',v:c.contact,rows:2});
   openModal(c.id?'クライアントを編集':'クライアントを追加',html,async()=>{
     const d=formVals(); if(!d.name){toast('クライアント名を入力してください');return}
+    d.refs=[0,1,2].map(i=>{const r={name:d['ref'+i+'_name']||'',ig:d['ref'+i+'_ig']||'',tt:d['ref'+i+'_tt']||'',yt:d['ref'+i+'_yt']||''};['name','ig','tt','yt'].forEach(k=>delete d['ref'+i+'_'+k]);return r}).filter(r=>r.ig||r.tt||r.yt).map((r,i)=>Object.assign(r,{name:r.name||'参考'+(i+1)}));
     d.active=d.active!=='0';
     const id=c.id||S.db.collection('clients').doc().id;
     for(const k of ['fetchStatus','fetchRequestedAt','fetchedAt','fetchError','source','quotaHistory','quotaMonths','aliases','libraryUrl','libraryUpdatedAt','libraryStatus','libraryError','libraryRequestedAt','driveFolderId','drivePdfId','drivePdfAt','driveShared'])if(c[k]!==undefined)d[k]=c[k];
     if(c.name&&normName(c.name)!==normName(d.name))d.aliases=[...new Set((c.aliases||[]).concat([c.name]))];
-    const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''));
+    const urlChanged=['ig','tt','yt'].some(p=>(d[p]||'')!==(c[p]||''))||JSON.stringify(d.refs||[])!==JSON.stringify(c.refs||[]);
     if(await save('clients',id,d)){closeModal();toast('保存しました');if(urlChanged&&hasUrls(d)&&d.active!==false)requestFetch([id])}
   },c.id?async()=>{if(await del('clients',c.id)){closeModal();toast('削除しました',S.lastTrash)}}:null);
 }
@@ -613,9 +617,59 @@ function analysis(cid,m){
     const best=vs.filter(v=>isNum(v.views)).sort((a,b)=>b.views-a.views)[0];
     if(best&&vs.length>1&&isNum(x.vpp)&&x.vpp>0)out.push(RP[p].name+'で最も再生されたのは「'+(best.title||'無題').slice(0,30)+'」（'+fmt(best.views)+'回、平均の'+fmt(best.views/x.vpp,1)+'倍）。');
   }
+  {const G=refData(cid,m);if(G)refSummary(G).forEach(t=>out.push(t))}
   if(q&&d.videos)contractRows(cid,m).forEach(r=>{const v=contractVerdict(r);if(v.diff===null)return;
     out.push(r.label+'は契約'+r.q+'本に対して'+r.a+'本の投稿'+(v.diff>0?'で、'+v.diff+'本の超過です。':v.diff<0?'で、'+(-v.diff)+'本不足しています。':'で、契約どおりです。'))});
   return out;
+}
+/* ---------- 競合・参考アカウントとの比較（クライアントごとに登録した最大3アカウントを同じ方法で取得） ---------- */
+function refMetrics(r,p){
+  const b=baseOf(p);const blk=r[b]||{};const vs=(r.videos||[]).filter(v=>RP[p].kind?rkey(v)===p:v.platform===p);
+  if(!vs.length&&!isNum(blk.followers))return null;
+  const x={followers:blk.followers,posts:vs.length};
+  for(const k of ['views','likes','comments','shares','saves']){const a=vs.filter(v=>isNum(v[k]));if(a.length)x[k]=a.reduce((t,v)=>t+v[k],0)}
+  if(isNum(x.views)&&x.posts)x.vpp=x.views/x.posts;
+  if(isNum(x.views)&&x.views>0)x.er=RP[p].eng.reduce((a,k)=>a+(isNum(x[k])?x[k]:0),0)/x.views*100;
+  x.top=(r.top||[]).filter(v=>RP[p].kind?rkey(v)===p:v.platform===p)[0]||null;
+  return x;
+}
+function refData(cid,m){
+  const d=metricsFor(cid,m);const refs=d&&d.refs||[];if(!refs.length)return null;
+  const plats=['ig','tt','yts','ytl'].filter(p=>hasPlat(d,p)||refs.some(r=>refMetrics(r,p)));
+  return plats.map(p=>{
+    const own=platMetrics(d,p,cid,m);const ov=vidsOf(d,p).filter(v=>isNum(v.views)).sort((a,b)=>b.views-a.views)[0]||null;
+    const rows=[{name:cName(cid)+'（お客様）',own:1,x:own?Object.assign({},own,{top:ov}):null}].concat(refs.map(r=>({name:r.name,x:refMetrics(r,p)})));
+    rows.forEach(r=>{if(r.x)r.x.fr=isNum(r.x.vpp)&&isNum(r.x.followers)&&r.x.followers>0?r.x.vpp/r.x.followers:null});
+    const others=rows.filter(r=>!r.own&&r.x);const avg=k=>{const a=others.map(r=>r.x[k]).filter(isNum);return a.length?a.reduce((s,v)=>s+v,0)/a.length:null};
+    return{p,rows,avg:{vpp:avg('vpp'),er:avg('er'),followers:avg('followers'),posts:avg('posts')}};
+  }).filter(g=>g.rows.some(r=>!r.own&&r.x));
+}
+function refSummary(G){
+  const out=[];
+  for(const g of G){const me=g.rows[0].x;if(!me)continue;const n=g.rows.filter(r=>r.x&&isNum(r.x.vpp)).length;
+    const rank=g.rows.filter(r=>r.x&&isNum(r.x.vpp)).sort((a,b)=>b.x.vpp-a.x.vpp).findIndex(r=>r.own)+1;
+    let t=RP[g.p].name+'：';
+    if(isNum(me.vpp)&&isNum(g.avg.vpp)&&g.avg.vpp>0)t+='1本あたり再生は'+fmt(me.vpp)+'回で、競合・参考アカウント平均（'+fmt(g.avg.vpp)+'回）の'+fmt(me.vpp/g.avg.vpp,1)+'倍'+(rank?'（'+n+'アカウント中'+rank+'位）':'')+'。';
+    if(isNum(me.posts)&&isNum(g.avg.posts))t+='投稿数は'+me.posts+'本（平均'+fmt(g.avg.posts,1)+'本）。';
+    if(isNum(me.er)&&isNum(g.avg.er))t+='反応率は'+fmt(me.er,1)+'%（平均'+fmt(g.avg.er,1)+'%）。';
+    if(t.length>RP[g.p].name.length+1)out.push(t)}
+  return out;
+}
+function refHtml(cid,m,pdf){
+  const c=cById(cid);const G=refData(cid,m);
+  if(!G){if(pdf)return'';const has=(c.refs||[]).length;
+    return'<div class="sec"><h3>競合・参考アカウントとの比較</h3><div class="notice">'+(has?'登録した競合・参考アカウントの数字はまだ取得していません。「数字を更新」を押すと取得します（5〜10分）。 <button class="primary" data-act="fetchOne" data-id="'+cid+'">数字を更新</button>':'同じ業種のライバルや目標にしたいアカウントを登録すると、フォロワー・投稿数・1本あたり再生を並べて比べられます。 <button class="primary" data-act="editClient" data-id="'+cid+'">競合・参考アカウントを登録</button>')+'</div></div>'}
+  const cols=[['followers','フォロワー',0],['posts','今月の投稿',0],['vpp','1本あたり再生',0],['fr','フォロワー1人あたり再生',1],['er','反応率',1]];
+  const best=(g,k)=>{const a=g.rows.filter(r=>r.x&&isNum(r.x[k]));return a.length>1?a.reduce((b,r)=>r.x[k]>b.x[k]?r:b):null};
+  const cell=(g,r,k,dp)=>{const v=r.x&&r.x[k];if(!isNum(v))return'<td class="r num"><span class="hint">—</span></td>';const b=best(g,k);
+    return'<td class="r num'+(r.own?' me':'')+'">'+(b===r?'<span class="chip good" style="font-size:10px">1位</span> ':'')+fmt(v,dp)+(k==='er'?'%':k==='fr'?'倍':'')+'</td>'};
+  const sum=refSummary(G);
+  return'<div class="sec refsec">'+(pdf?'<h4>競合・参考アカウントとの比較</h4>':'<div class="sec-h"><h3>競合・参考アカウントとの比較</h3><button data-act="editClient" data-id="'+cid+'">競合・参考を変更</button></div>')
+    +(sum.length?'<ul class="note" style="margin:0;padding-left:24px">'+sum.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':'')
+    +G.map(g=>'<div><div style="font-weight:700;margin:6px 0 4px"><b style="color:var(--'+g.p+')">■</b> '+RP[g.p].name+'</div>'+(pdf?'':'<div class="scroll">')+'<table class="reftab"><thead><tr><th>アカウント</th>'+cols.map(c=>'<th class="r">'+c[1]+'</th>').join('')+(pdf?'':'<th>いちばん見られた動画</th>')+'</tr></thead><tbody>'
+      +g.rows.map(r=>'<tr'+(r.own?' class="me-row"':'')+'><td>'+(r.own?'<b>'+esc(r.name)+'</b>':esc(r.name))+'</td>'+(r.x?cols.map(c=>cell(g,r,c[0],c[2])).join('')+(pdf?'':'<td class="wrap">'+(r.x.top?esc((r.x.top.title||'(無題)').slice(0,40))+' <span class="hint">'+fmt(r.x.top.views)+'回</span>':'<span class="hint">—</span>')+'</td>'):'<td colspan="'+(cols.length+(pdf?0:1))+'" class="hint">この媒体のアカウントは未登録・取得できませんでした</td>')+'</tr>').join('')
+      +'</tbody></table>'+(pdf?'':'</div>')+'</div>').join('')
+    +'<p class="hint" style="margin:0">競合・参考アカウントの数字は、お客様と同じ日に公開データ（ログイン不要）から取得した'+mshort(m)+'投稿分です。「1位」は並べたアカウントの中でいちばん良い数字です。</p></div>';
 }
 /* ---------- SNSの貢献度とレベル判定（業界の目安＋当社運用アカウントとの比較） ---------- */
 // Reference bands for small/medium business accounts. er = (likes+comments+shares+saves) / views (%).
@@ -677,7 +731,7 @@ function levelHtml(cid,m,pdf){
   return'<div class="sec lvsec">'+head
     +'<div class="lvtop"><div class="lvbig lv-'+(L.lv?L.lv[0]:'B')+'"><span class="k">総合レベル</span><span class="v">'+(L.lv?L.lv[0]:'—')+'</span><span class="t">'+(L.lv?L.lv[1]:'')+'</span></div>'
     +'<div class="lvtxt">'+levelSummary(L).map(t=>'<div>'+esc(t)+'</div>').join('')+'<div class="lvscale">'+LEVELS.map(l=>'<span class="lv lv-'+l[0]+'">'+l[0]+'</span>'+l[1]).join('　')+'</div></div></div>'
-    +(pdf?'<table class="lvtab">':'<div class="scroll"><table>')+'<thead><tr><th>媒体</th><th>再生の貢献度</th><th>フォロワー増の貢献度</th>'+(pdf?'':'<th class="r">1本あたり再生</th>')+'<th class="r">再生倍率<br><span class="hint">（業界目安）</span></th><th class="r">エンゲージメント率<br><span class="hint">（業界平均）</span></th><th class="r">運用アカウント比較</th><th>レベル</th></tr></thead><tbody>'
+    +(pdf?'<table class="lvtab">':'<div class="scroll"><table>')+'<thead><tr><th>媒体</th><th>再生の貢献度</th><th>フォロワー増の貢献度</th>'+(pdf?'':'<th class="r">1本あたり再生</th>')+'<th class="r">フォロワー1人あたり再生<br><span class="hint">（業界の目安）</span></th><th class="r">反応率<br><span class="hint">（業界の目安）</span></th><th class="r">運用アカウント比較</th><th>レベル</th></tr></thead><tbody>'
     +L.rows.map(r=>{const B=BENCH[r.p],lv=r.lv||{};const pr=r.peer;
       return'<tr><td><b style="color:var(--'+r.p+')">■</b> '+RP[r.p].name+'</td><td>'+bar(r.vshare,r.p)+'</td><td>'+(r.p==='yts'?'<span class="hint">横動画と共通</span>':bar(r.gshare,r.p)+(isNum(r.gain)?'<div class="hint">'+(r.gain>=0?'+':'')+fmt(r.gain)+'人</div>':''))+'</td>'
         +(pdf?'':'<td class="r num">'+fmt(r.x.vpp)+'</td>')
@@ -685,14 +739,14 @@ function levelHtml(cid,m,pdf){
         +'<td class="r num">'+(isNum(lv.er)?fmt(lv.er,1)+'%':'—')+'<div class="hint">（'+fmt(B.er.avg,1)+'%）'+(isNum(lv.er)?' '+vsAvg(lv.er,B.er.avg):'')+'</div></td>'
         +'<td class="r num">'+(pr?(pr.rank?pr.n+'社中 <b>'+pr.rank+'位</b>':'—')+'<div class="hint">中央値 '+fmt(pr.vpp)+'回 '+vsAvg(r.x.vpp,pr.vpp)+'</div>':'<span class="hint">比較対象不足</span>')+'</td>'
         +'<td>'+lvChip(lv.lv)+(lv.lv?' <span class="hint">'+lv.lv[1]+'</span>':'')+'</td></tr>'}).join('')
-    +'</tbody></table>'+(pdf?'':'</div>')+'<p class="hint" style="margin:0">再生の貢献度＝総再生数のうちその媒体の割合。フォロワー増の貢献度＝フォロワー・登録者の増加数のうちその媒体の割合。再生倍率＝1本あたり再生 ÷ フォロワー数（フォロワー以外にどれだけ届いたか）。エンゲージメント率＝（いいね＋コメント＋シェア・保存）÷ 再生。レベルは再生倍率とエンゲージメント率を業界の目安と比べて5段階で判定し、総合は再生の多い媒体ほど重く数えています。運用アカウント比較は'+(L.rows.find(r=>r.peer)?L.rows.find(r=>r.peer).peer.label:'当社の運用アカウント')+'の同じ月の1本あたり再生との比較（社名は出しません）。'+esc(BENCH_NOTE)+'</p></div>';
+    +'</tbody></table>'+(pdf?'':'</div>')+'<p class="hint" style="margin:0">再生の貢献度＝総再生数のうちその媒体の割合。フォロワー増の貢献度＝フォロワー・登録者の増加数のうちその媒体の割合。フォロワー1人あたり再生＝1本あたり再生 ÷ フォロワー数（1.0倍なら、フォロワーと同じ人数に見られた）。反応率＝100回見られたうち、いいね・コメント・シェア・保存が何回あったか。レベルはこの2つを業界の目安と比べて5段階で判定し、総合は再生の多い媒体ほど重く数えています。運用アカウント比較は'+(L.rows.find(r=>r.peer)?L.rows.find(r=>r.peer).peer.label:'当社の運用アカウント')+'の同じ月の1本あたり再生との比較（社名は出しません）。'+esc(BENCH_NOTE)+'</p></div>';
 }
 function levelSummary(L){
   const out=[];
   if(L.top&&isNum(L.top.vshare))out.push('再生数の'+fmt(L.top.vshare,0)+'%を'+RP[L.top.p].name+'が占め、いちばん貢献しています。');
   L.rows.forEach(r=>{const B=BENCH[r.p],lv=r.lv;if(!lv)return;
-    const parts=[];if(isNum(lv.er))parts.push('エンゲージメント率'+fmt(lv.er,1)+'%（業界平均'+fmt(B.er.avg,1)+'%'+(lv.er>=B.er.avg?'を上回る':'を下回る')+'）');
-    if(isNum(lv.vr))parts.push('再生倍率'+fmt(lv.vr,2)+'倍（目安'+fmt(B.vr.avg,1)+'倍）');
+    const parts=[];if(isNum(lv.vr))parts.push('1本がフォロワーの'+fmt(lv.vr,1)+'倍の人数に見られています（目安は'+fmt(B.vr.avg,1)+'倍）');
+    if(isNum(lv.er))parts.push('100回見られて'+fmt(lv.er,1)+'回の反応（目安は'+fmt(B.er.avg,1)+'回'+(lv.er>=B.er.avg?'、上回っています':'、下回っています')+'）');
     if(parts.length)out.push(RP[r.p].name+'：レベル'+lv.lv[0]+'（'+lv.lv[1]+'）。'+parts.join('、')+'。')});
   return out;
 }
@@ -735,6 +789,7 @@ function viewRep(){
     +'<div class="tile"><span class="lbl">投稿本数</span><span class="val">'+fmt(posts)+'</span><span class="sub num">'+deltaHtml(posts,pposts)+'</span></div>'
     +'<div class="tile"><span class="lbl">総再生数</span><span class="val">'+fmt(sumV)+'</span><span class="sub num">'+deltaHtml(sumV,sumPV||null)+'</span></div>'
     +'<div class="tile"><span class="lbl">1本あたり再生数</span><span class="val">'+fmt(posts?sumV/posts:null)+'</span><span class="sub num">'+deltaHtml(posts?sumV/posts:null,pposts?sumPV/pposts:null)+'</span></div></div>';
+  h+=refHtml(c.id,m);
   h+=levelHtml(c.id,m);
   h+=contractHtml(c.id,m);
   const an=analysis(c.id,m);
@@ -768,6 +823,7 @@ function reportText(){
   for(const p of reportPlats(d)){const def=RP[p];if(!hasPlat(d,p))continue;const x=platMetrics(d,p,c.id,m);const y=platMetrics(pd,p,c.id,pm)||{};
     t+='\n■'+def.name+'\n'+[line(def.fields[0][1],x.followers,y.followers)].concat(def.fields.slice(1).map(([k,l])=>line(l,x[k],y[k],k==='watchHours'?1:0)),[line('1本あたり再生',x.vpp,y.vpp)]).filter(Boolean).join('\n')+'\n'}
   const cr=contractRows(c.id,m);if(cr.length)t+='\n■契約本数との比較\n'+cr.map(r=>r.label+'：契約'+r.q+'本 → 投稿'+(isNum(r.a)?r.a:'—')+'本（'+contractVerdict(r).txt+'）').join('\n')+'\n';
+  {const G=refData(c.id,m);if(G)t+='\n■競合・参考アカウントとの比較\n'+refSummary(G).map(x=>'・'+x).join('\n')+'\n'}
   {const L=levelData(c.id,m);if(L)t+='\n■SNSの貢献度とレベル\n総合レベル：'+(L.lv?L.lv[0]+'（'+L.lv[1]+'）':'—')+'\n'+levelSummary(L).map(x=>'・'+x).join('\n')+'\n'}
   const an=analysis(c.id,m);if(an.length)t+='\n■今月のポイント\n'+an.map(x=>'・'+x).join('\n')+'\n';
   if(d.note)t+='\n■所感・来月の施策\n'+d.note+'\n';
@@ -1013,7 +1069,7 @@ const PDF_CSS='.pdfp{width:794px;height:1123px;background:#fff;color:#17283b;fon
  +'.pdfp table{width:100%;border-collapse:collapse;font-size:12px}.pdfp th{background:#f1f4f8;color:#5a6a7c;font-weight:500;font-size:11px;text-align:left;padding:7px 8px}.pdfp td{padding:7px 8px;border-bottom:1px solid #d9e0e8}.pdfp td.r,.pdfp th.r{text-align:right;font-family:var(--num)}'
  +'.pdfp .up{color:#1d8656}.pdfp .down{color:#c3372d}.pdfp .flat{color:#5a6a7c}.pdfp .note{white-space:pre-wrap;background:#f1f4f8;border-radius:8px;padding:14px;font-size:13px;line-height:1.8}'
  +'.pdfp .chart{width:440px}.pdfp .chart svg{width:440px;height:auto;display:block}.pdfp .chart text{font-family:var(--num);font-size:10px}.pdfp .legend{display:flex;gap:14px;font-size:11px;color:#5a6a7c}.pdfp .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}'
- +'.pdfp .lvtop{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.lvbig{display:grid;justify-items:center;min-width:120px;padding:10px 16px;border-radius:12px;border:2px solid currentColor}.lvbig .k{font-size:11px;color:var(--muted)}.lvbig .v{font-family:var(--num);font-size:44px;font-weight:700;line-height:1}.lvbig .t{font-size:12px;font-weight:700}.lvtxt{flex:1 1 300px;display:grid;gap:3px;font-size:13px}.lvscale{font-size:11px;color:var(--muted);margin-top:4px}.lv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-family:var(--num);font-weight:700;font-size:13px;color:#fff;margin-right:3px}.lv-S{background:#7a3fc4;color:#7a3fc4}.lv-A{background:#1d8656;color:#1d8656}.lv-B{background:#2f6db0;color:#2f6db0}.lv-C{background:#c98a12;color:#c98a12}.lv-D{background:#c3372d;color:#c3372d}span.lv{color:#fff}.lvbig.lv-S,.lvbig.lv-A,.lvbig.lv-B,.lvbig.lv-C,.lvbig.lv-D{background:transparent}.cbar{position:relative;min-width:110px;height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}.cbar i{position:absolute;left:0;top:0;bottom:0;opacity:.85}.cbar b{position:relative;font-family:var(--num);font-size:12px;padding-left:6px;line-height:18px}.pdfp .lvsec{display:grid;gap:12px}.pdfp .lvtab th,.pdfp .lvtab td{padding:6px 5px;font-size:11px;white-space:normal}.pdfp .lvtab .cbar{min-width:0;width:100px}.pdfp .lvsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvsec p.hint{line-height:1.6}'
+ +'.pdfp .lvtop{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.lvbig{display:grid;justify-items:center;min-width:120px;padding:10px 16px;border-radius:12px;border:2px solid currentColor}.lvbig .k{font-size:11px;color:var(--muted)}.lvbig .v{font-family:var(--num);font-size:44px;font-weight:700;line-height:1}.lvbig .t{font-size:12px;font-weight:700}.lvtxt{flex:1 1 300px;display:grid;gap:3px;font-size:13px}.lvscale{font-size:11px;color:var(--muted);margin-top:4px}.lv{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;font-family:var(--num);font-weight:700;font-size:13px;color:#fff;margin-right:3px}.lv-S{background:#7a3fc4;color:#7a3fc4}.lv-A{background:#1d8656;color:#1d8656}.lv-B{background:#2f6db0;color:#2f6db0}.lv-C{background:#c98a12;color:#c98a12}.lv-D{background:#c3372d;color:#c3372d}span.lv{color:#fff}.lvbig.lv-S,.lvbig.lv-A,.lvbig.lv-B,.lvbig.lv-C,.lvbig.lv-D{background:transparent}.cbar{position:relative;min-width:110px;height:18px;background:var(--sunk);border-radius:4px;overflow:hidden}.cbar i{position:absolute;left:0;top:0;bottom:0;opacity:.85}.cbar b{position:relative;font-family:var(--num);font-size:12px;padding-left:6px;line-height:18px}.pdfp .lvsec{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}.pdfp .refsec{display:grid;gap:8px;grid-template-columns:minmax(0,1fr)}.pdfp .reftab{table-layout:fixed}.pdfp .reftab td:first-child,.pdfp .reftab th:first-child{width:30%}.pdfp .reftab .chip{font-size:9px!important;padding:0 4px}.pdfp .reftab th,.pdfp .reftab td{padding:5px 5px;font-size:11px;white-space:normal}.pdfp .reftab tr.me-row td{background:#eef3f9}.pdfp .refsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvtab th,.pdfp .lvtab td{padding:6px 5px;font-size:11px;white-space:normal}.pdfp .lvtab .cbar{min-width:0;width:100px}.pdfp .lvsec .hint{font-size:10px;color:#5a6a7c}.pdfp .lvsec p.hint{line-height:1.6}'
  +'.pdfp .foot{position:absolute;left:48px;right:48px;bottom:24px;display:flex;justify-content:space-between;font-size:10px;color:#5a6a7c;border-top:1px solid #d9e0e8;padding-top:8px}';
 function pdfPages(cid,m){
   const c=cById(cid),d=metricsFor(cid,m),pm=madd(m,-1),pd=metricsFor(cid,pm);if(!c||!d)return null;
@@ -1029,6 +1085,8 @@ function pdfPages(cid,m){
     +'<h4>媒体別の結果（前月比）</h4><table><thead><tr><th>媒体</th><th class="r">フォロワー</th><th class="r">増減</th><th class="r">再生数</th><th class="r">増減</th><th class="r">投稿</th><th class="r">1本あたり再生</th></tr></thead><tbody>'
     +plats.map(p=>{const x=platMetrics(d,p,cid,m),y=platMetrics(pd,p,cid,pm)||{};return'<tr><td><b style="color:var(--'+p+')">■</b> '+RP[p].name+'</td><td class="r">'+fmt(x.followers)+'</td><td class="r">'+deltaHtml(x.followers,y.followers)+'</td><td class="r">'+fmt(x.views)+'</td><td class="r">'+deltaHtml(x.views,y.views)+'</td><td class="r">'+fmt(x.posts)+'</td><td class="r">'+fmt(x.vpp)+'</td></tr>'}).join('')+'</tbody></table>'
     +'</div>');
+  const rfH=refHtml(cid,m,true);
+  if(rfH)pages.push('<div class="band" style="padding:22px 48px"><div class="k">SNS運用 月次レポート</div><div class="m">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="body">'+rfH+'</div>');
   const lvH=levelHtml(cid,m,true);
   if(lvH)pages.push('<div class="band" style="padding:22px 48px"><div class="k">SNS運用 月次レポート</div><div class="m">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="body">'+lvH+'</div>');
   if(an.length||d.note)pages.push('<div class="band" style="padding:22px 48px"><div class="k">SNS運用 月次レポート</div><div class="m">'+esc(c.name)+' 様 ／ '+mlabel(m)+'</div></div><div class="body">'+(an.length?'<h4>今月のポイント</h4><ul class="note" style="margin:0;padding-left:28px">'+an.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul>':'')+(d.note?'<h4>所感・来月の施策</h4><div class="note">'+esc(d.note)+'</div>':'')+'</div>');
@@ -1087,7 +1145,7 @@ async function pdfAll(){
 
 /* ---------- SNSの数字を今すぐ取得（Claude Code Remote のルーティンを起動） ---------- */
 const REFRESH_TRIGGER='trig_018NmnVi9aNz6MDEDbPco6Zf';
-const hasUrls=c=>['ig','tt','yt'].some(p=>(c[p]||'').trim());
+const hasUrls=c=>['ig','tt','yt'].some(p=>(c[p]||'').trim())||(c.refs||[]).some(r=>r.ig||r.tt||r.yt);
 const RUN_MAX=30*60*1000;
 const isRunning=c=>c.fetchStatus==='running'&&Date.now()-new Date(c.fetchRequestedAt||0).getTime()<RUN_MAX;
 function fetchChip(c){

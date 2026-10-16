@@ -57,6 +57,22 @@ class T(unittest.TestCase):
         self.assertEqual(d["videos"][0]["title"], "Before/After")
         self.assertEqual(d["videos"][2]["kind"], "long")
 
+    def test_reference_accounts_fold_into_client_doc(self):
+        fx = {"apify~instagram-profile-scraper": IG, "apify~instagram-reel-scraper": [], "clockworks~tiktok-scraper": TT, "streamers~youtube-scraper": YT}
+        with mock.patch.object(collect, "run_actor", side_effect=lambda a, i, t: fx[a]):
+            docs, errors = collect.collect([{"id": "c1", "name": "A", "refs": [{"name": "競合A", "ig": "https://www.instagram.com/shop_a/", "tt": "@shop_a"},
+                                                                         {"name": "空", "ig": ""}]}], "2026-09", "tok", log=lambda s: None)
+        self.assertEqual([d["docId"] for d in docs], ["c1_2026-09"])
+        d = docs[0]["data"]
+        self.assertNotIn("ig", d)
+        self.assertEqual(len(d["refs"]), 1)
+        r = d["refs"][0]
+        self.assertEqual(r["name"], "競合A")
+        self.assertEqual(r["ig"]["followers"], 1320)
+        self.assertEqual(r["tt"]["views"], 1000)
+        self.assertEqual(r["top"][0]["views"], 18000)
+        self.assertEqual(len(r["videos"]), 2)
+
     def test_is_short(self):
         self.assertTrue(collect.is_short({"url": "https://www.youtube.com/shorts/abc"}))
         self.assertTrue(collect.is_short({"url": "https://www.youtube.com/watch?v=a", "duration": "0:58"}))
