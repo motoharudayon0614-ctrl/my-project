@@ -214,7 +214,9 @@ def main():
     ap.add_argument("--min-views", type=int, default=100000)
     ap.add_argument("--allow-ads", action="store_true", help="広告・タイアップ・アフィリエイトらしい動画も残す")
     ap.add_argument("--limit", type=int, default=20, help="Instagram・TikTok の検索語1つあたりの取得数（Apify の料金に効く）")
+    ap.add_argument("--apify", default="ig", help="Apify（有料）を使う媒体をカンマ区切りで（yt,tt,ig）。既定は Instagram だけ")
     a = ap.parse_args()
+    paid = {x.strip() for x in a.apify.split(",") if x.strip()}
     plan = json.load(open(a.plan, encoding="utf-8"))
     rows, errors = [], []
 
@@ -228,7 +230,9 @@ def main():
             except Exception:  # 検索ページが開けないときは、あとで Apify でまとめて探す
                 yt_failed.append(q)
         time.sleep(1)
-    if yt_failed:
+    if yt_failed and "yt" not in paid:
+        errors.append("YouTube：検索ページが開けず、Apify（有料）は使わない設定のため %d 語を飛ばしました" % len(yt_failed))
+    elif yt_failed:
         try:
             found = youtube_apify(yt_failed, a.limit)
             print("yt(Apify): %d件" % len(found), file=sys.stderr)
@@ -242,6 +246,9 @@ def main():
     for key, fn in (("tt", tiktok), ("ig", instagram)):
         terms = sorted({x for p in plan for x in p.get(key) or []})
         if not terms:
+            continue
+        if key not in paid:
+            errors.append("%s：Apify（有料）は使わない設定のため飛ばしました" % ("TikTok" if key == "tt" else "Instagram"))
             continue
         try:
             found = fn(terms, a.limit)
