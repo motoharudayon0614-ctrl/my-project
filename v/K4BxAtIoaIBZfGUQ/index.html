@@ -1,0 +1,168 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>オフィスアズ 動画ライブラリ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: a client's own video shelf — summary strip, search/filter bar, then one section per month (newest first) with a row per video. */
+:root{
+  --bg:#f6f5f1; --surface:#ffffff; --sunk:#efeee8; --ink:#1d2a38; --muted:#5d6874; --line:#dedcd3;
+  --accent:#22405f; --accent-ink:#ffffff; --done:#1f7a52; --wait:#a86a00; --wip:#3b6aa0;
+  --font:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+  --num:"Barlow Semi Condensed","Zen Kaku Gothic New",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --surface:#1a2129; --sunk:#151b22; --ink:#e7ebef; --muted:#9aa6b2; --line:#2b3540;
+  --accent:#9cc0e4; --accent-ink:#12171d; --done:#4cc28c; --wait:#e2b44a; --wip:#7fb0e6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --surface:#1a2129; --sunk:#151b22; --ink:#e7ebef; --muted:#9aa6b2; --line:#2b3540;
+  --accent:#9cc0e4; --accent-ink:#12171d; --done:#4cc28c; --wait:#e2b44a; --wip:#7fb0e6; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.6}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 64px;padding-inline:16px;display:grid;gap:22px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+header{display:grid;gap:4px;border-bottom:2px solid var(--accent);padding-bottom:14px}
+header .eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted)}
+header h1{margin:0;font-size:26px;text-wrap:balance}
+header .upd{font-size:12px;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile .v{font-family:var(--num);font-size:30px;font-weight:600;line-height:1.1}
+.tile .v small{font-size:14px;color:var(--muted);font-weight:500}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar input,.bar select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+.bar input{flex:1 1 220px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 12px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.month{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.month summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:14px 16px;background:var(--sunk)}
+.month summary::-webkit-details-marker{display:none}
+.month summary h2{margin:0;font-size:17px}
+.month summary .cnt{font-size:13px;color:var(--muted)}
+.month summary .cnt b{font-family:var(--num);font-size:20px;color:var(--ink)}
+.month summary::after{content:"▾";color:var(--muted);margin-left:8px}
+.month:not([open]) summary::after{content:"▸"}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 300px 200px;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.dates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dt{display:grid;gap:1px;padding:6px 10px;border-radius:8px;background:var(--sunk)}
+.dt .k{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.dt .v{font-family:var(--num);font-size:16px;font-weight:600;line-height:1.2}
+.dt .v small{font-family:var(--font);font-size:11px;font-weight:500;color:var(--muted);margin-left:2px}
+.dt.post{border-left:3px solid var(--accent)}
+.dt.post .tag{font-size:10px;font-weight:700;color:var(--accent)}
+.dt.none .v{font-size:13px;color:var(--muted);font-weight:500}
+.colhead{display:grid;grid-template-columns:minmax(0,1fr) 300px 200px;gap:14px;padding:8px 16px 0;font-size:11px;color:var(--muted)}
+.row .t{min-width:0}
+.row .t b{display:block;overflow-wrap:anywhere}
+.st{display:inline-block;font-size:11px;font-weight:700;border:1px solid currentColor;border-radius:999px;padding:0 8px;margin-top:3px}
+.st.done{color:var(--done)} .st.wait{color:var(--wait)} .st.wip{color:var(--wip)}
+.links{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.links a{font-size:12px;font-weight:700;text-decoration:none;color:var(--accent-ink);background:var(--accent);border-radius:8px;padding:6px 10px;white-space:nowrap}
+.links a.sub{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.links .none{font-size:12px;color:var(--muted)}
+@media (max-width:720px){.row{grid-template-columns:minmax(0,1fr)}.links{justify-content:flex-start}.colhead{display:none}}
+.sns{display:grid;gap:10px}
+.sns h2{font-size:17px;margin:0}
+.sns table{width:100%;border-collapse:collapse;font-size:13px}
+.sns th,.sns td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.sns th{font-size:11px;color:var(--muted);font-weight:500;background:var(--sunk)}
+.sns td.r,.sns th.r{text-align:right}
+.sns td.w{white-space:normal;min-width:160px}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:12px}
+footer{font-size:12px;color:var(--muted)}
+/* PDF / printing: light palette, every month open, no filter bar, rows kept whole */
+@page{size:A4;margin:12mm 10mm}
+@media print{
+  :root,:root:not([data-theme="light"]){--bg:#fff;--surface:#fff;--sunk:#f1f3f6;--ink:#1d2a38;--muted:#5d6874;--line:#d9dde3;--accent:#22405f;--accent-ink:#fff;--done:#1f7a52;--wait:#a86a00;--wip:#3b6aa0;color-scheme:light}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:12px}
+  .wrap{max-width:none;padding:0;gap:14px}
+  .bar{display:none}
+  .row{grid-template-columns:minmax(0,1fr) 260px 170px;padding:8px 12px;break-inside:avoid}
+  .colhead{grid-template-columns:minmax(0,1fr) 260px 170px}
+  .month{break-inside:auto}
+  .month summary{break-after:avoid}
+  .month summary::after{content:none}
+  .scroll{overflow:visible}
+  .sns{break-before:page}
+  .sns tr{break-inside:avoid}
+  .pdfonly{display:block}
+}
+.pdfonly{display:none}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">VIDEO LIBRARY</div>
+    <h1 id="ttl"></h1>
+    <div class="upd" id="upd"></div>
+  </header>
+  <section class="tiles" id="tiles" aria-label="概要"></section>
+  <div class="bar">
+    <input id="q" type="search" placeholder="動画名で探す（例：コーティング）" aria-label="動画名で検索">
+    <select id="m" aria-label="月で絞り込む"></select>
+    <div class="chips" role="group" aria-label="状態で絞り込む">
+      <button class="chip" data-st="" aria-pressed="true">すべて</button>
+      <button class="chip" data-st="done" aria-pressed="false">完成</button>
+      <button class="chip" data-st="wait" aria-pressed="false">確認待ち</button>
+      <button class="chip" data-st="wip" aria-pressed="false">制作中</button>
+    </div>
+  </div>
+  <main id="list"></main>
+  <section class="sns" id="sns" hidden></section>
+  <footer>動画のリンクはGoogleドライブ等の共有リンクです。開けない場合は担当者までご連絡ください。<span class="pdfonly">PDF内の「動画を見る」などのボタンを押すと、その動画が開きます。</span></footer>
+</div>
+
+<script id="data" type="application/json">{"client": "オフィスアズ", "updated": "2026/10/26", "today": "2026-10-26", "videos": [{"title": "店内紹介", "date": "2026-10-07", "due": "2026-09-21", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1SvXzWmKQBxQ6frLtniy5YTpN2QDOt3H7/view?usp=drive_link"}]}, {"title": "ローマ", "date": "2026-11-11", "due": "2026-10-13", "month": "2026-11", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1kEGWKb8QDxcSG7CjSvdvL_5YoVkY16qa/view?usp=drivesdk"}]}, {"title": "C63S", "date": "2026-10-28", "due": "2026-10-09", "month": "2026-10", "st": "wait", "links": []}, {"title": "x1", "date": "2026-11-04", "due": "2026-10-10", "month": "2026-11", "st": "wait", "links": []}, {"title": "M2", "date": "2026-09-23", "due": "2026-09-13", "month": "2026-09", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1fPbu_mlqUDOuRRpH4Ju9DgRcQq0uLYkF/view?usp=drive_link"}]}, {"title": "Sクラス", "date": "2026-09-16", "due": "2026-09-09", "month": "2026-09", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1ZpXxl_GufSCbPVRYXE_izbS61plli_VD/view?usp=drive_link"}]}, {"title": "店舗紹介", "date": "2026-09-30", "due": "2026-09-18", "month": "2026-09", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1a1_2DYotdk75Q4pow-eBssiuihCbvzor/view?usp=drive_link"}]}, {"title": "レクサス", "date": "2026-10-14", "due": "2026-10-04", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/11xDLGepiUWvQdymbEXgkvVgAAGy3V8Mr/view?usp=drive_link"}]}, {"title": "ポルシェGT3", "date": "2026-11-25", "due": "2026-10-23", "month": "2026-11", "st": "wait", "links": []}, {"title": "整備メンテナンス", "date": "2026-12-09", "due": "2026-10-28", "month": "2026-12", "st": "wip", "links": []}, {"title": "x７", "date": "2026-10-21", "due": "2026-10-06", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1i3cXnr2q-lPhrtCZhw3l1x1DyEn9_nWi/view?usp=drivesdk"}]}, {"title": "720S", "date": "2026-11-18", "due": "2026-10-16", "month": "2026-11", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1Rx0_BOsElxqxqyjr2bHO42wtbm4lQOdi/view?usp=drivesdk"}]}, {"title": "ディーラーコーティング", "date": "2026-12-02", "due": "2026-10-26", "month": "2026-12", "st": "wip", "links": []}], "sns": [{"date": "2026-10-10", "p": "ytl", "title": "【新車時から大幅値落ち…】フェラーリ ローマ｜憧れの高級車が“この価格”に!?中古だからこそ注目したい一台！【在庫車両紹介】", "url": "https://www.youtube.com/watch?v=yNyfl-Gk2kk", "views": 14581, "likes": 32}, {"date": "2026-10-07", "p": "ig", "title": "レクサスLC500 VS LC500h🔥", "url": "https://www.instagram.com/p/DeMAPBHpMAB/", "views": 2643, "likes": 36}, {"date": "2026-10-07", "p": "tt", "title": "レクサスLC500 VS LC500h🔥", "url": "https://www.tiktok.com/@officeaz01/video/7693857949655092500", "views": 6215, "likes": 79}, {"date": "2026-10-07", "p": "yts", "title": "LC500とLC500h、選ぶならどっち？ガソリンとハイブリッドは性格が全然違う！", "url": "https://www.youtube.com/shorts/KGLhGDihWNE", "views": 404, "likes": 1}, {"date": "2026-10-03", "p": "ytl", "title": "【これが本命グレード!?】BMW X1 xDrive20d M Sport｜現行型を中古で狙うならコレ！上質さ×実用性を両立した一台【在庫車両紹介】", "url": "https://www.youtube.com/watch?v=teI4lacOhmk", "views": 11435, "likes": 21}, {"date": "2026-10-01", "p": "yts", "title": "滋賀で輸入車を探すなら！Office AZってこんなお店です🚗✨", "url": "https://www.youtube.com/shorts/yPGIYXUJohM", "views": 158, "likes": 1}, {"date": "2026-09-30", "p": "ig", "title": "店内紹介🤩", "url": "https://www.instagram.com/p/Dd6Un0NJ9-_/", "views": 2001, "likes": 56}, {"date": "2026-09-30", "p": "tt", "title": "店内紹介🤩", "url": "https://www.tiktok.com/@officeaz01/video/7691302655125392661", "views": 1571, "likes": 6}, {"date": "2026-09-26", "p": "ytl", "title": "【LEXUS LC500 VS LC500h】ガソリンとハイブリッドで性格は別物!? 内外装・音・燃費・価格を徹底比較！", "url": "https://www.youtube.com/watch?v=4u0WkmP8zec", "views": 16530, "likes": 52}, {"date": "2026-09-23", "p": "ig", "title": "オフィスアズの工場見学🏭", "url": "https://www.instagram.com/p/Ddn8BvXvuhu/", "views": 10289, "likes": 125}, {"date": "2026-09-23", "p": "yts", "title": "【ただの車屋じゃない】滋賀の輸入車専門店「Office Az」をご紹介！", "url": "https://www.youtube.com/shorts/8-Uzc_rX4-4", "views": 3746, "likes": 17}, {"date": "2026-09-19", "p": "ytl", "title": "【一番乱暴なCクラス】メルセデスAMG C63S クーペ エディション1｜10年落ちでも“この価格”!? 今では希少なV8×FR モデル!【在庫車両紹介】", "url": "https://www.youtube.com/watch?v=cbwC-TWk-JI", "views": 54087, "likes": 68}, {"date": "2026-09-18", "p": "tt", "title": "オフィスアズの工場見学🏭", "url": "https://www.tiktok.com/@officeaz01/video/7686816223203446036", "views": 3135, "likes": 30}, {"date": "2026-09-16", "p": "ig", "title": "今回はM2のご紹介🤩", "url": "https://www.instagram.com/p/DdV6kBcPNxl/", "views": 3340, "likes": 47}, {"date": "2026-09-16", "p": "yts", "title": "今でも欲しいBMW M2 F87型｜街乗りもスポーツ走行も楽しめる1台", "url": "https://www.youtube.com/shorts/eHf0WyNqQG8", "views": 2061, "likes": 12}, {"date": "2026-09-15", "p": "tt", "title": "今回はM2のご紹介🤩", "url": "https://www.tiktok.com/@officeaz01/video/7685721369224531220", "views": 4458, "likes": 48}, {"date": "2026-09-12", "p": "ytl", "title": "【豪華オプション満載】BMW X7 xDrive35d M Sport｜新車1000万円超が“この価格”に!? 今が狙い目の一台！【在庫車両紹介】", "url": "https://www.youtube.com/watch?v=4ciZNywz5TM", "views": 122275, "likes": 142}, {"date": "2026-09-09", "p": "ig", "title": "王道メルセデスSクラスのご紹介！", "url": "https://www.instagram.com/p/DdD4DNdRd9B/", "views": 4738, "likes": 34}, {"date": "2026-09-09", "p": "tt", "title": "王道メルセデスSクラスのご紹介！", "url": "https://www.tiktok.com/@officeaz01/video/7683461400253140244", "views": 2054, "likes": 12}, {"date": "2026-09-09", "p": "ytl", "title": "【高性能FRが欲しければ買い!?】 BMW M2 F87型｜街乗りからスポーツ走行まで楽しめる魅力に迫る！", "url": "https://www.youtube.com/watch?v=QcW2SMZc7TM", "views": 10561, "likes": 31}, {"date": "2026-09-09", "p": "yts", "title": "【これがSクラス】メルセデス・ベンツ S500の最高級セダンならではの存在感", "url": "https://www.youtube.com/shorts/r_CdhuuUhhU", "views": 3492, "likes": 13}, {"date": "2026-09-02", "p": "ig", "title": "日本に20台しかない。", "url": "https://www.instagram.com/p/Dcx2Tugx1KJ/", "views": 9865, "likes": 113}, {"date": "2026-09-02", "p": "tt", "title": "日本に20台しかない。", "url": "https://www.tiktok.com/@officeaz01/video/7680860163892399381", "views": 30100, "likes": 301}, {"date": "2026-09-02", "p": "yts", "title": "【全国20台限定】メルセデスベンツAMG E53 ナイトカーボンがカッコよすぎる!?", "url": "https://www.youtube.com/shorts/3nAAPxb7gLg", "views": 1804, "likes": 11}], "snsAt": "2026/10/12"}</script>
+<script>
+(function(){
+const D=JSON.parse(document.getElementById('data').textContent);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const W='日月火水木金土';
+const dl=d=>{if(!d)return'';const [y,m,dd]=d.split('-').map(Number);return m+'/'+dd+'<small>（'+W[new Date(y,m-1,dd).getDay()]+'）</small>'};
+const dateBox=(cls,label,d,tag)=>'<div class="dt '+cls+(d?'':' none')+'"><span class="k">'+label+(tag?' <span class="tag">'+tag+'</span>':'')+'</span><span class="v">'+(d?dl(d):'未定')+'</span></div>';
+const ml=m=>{const [y,mo]=m.split('-');return y+'年'+Number(mo)+'月'};
+const ST={done:'完成',wait:'確認待ち',wip:'制作中'};
+const fmt=n=>typeof n==='number'?n.toLocaleString('ja-JP'):'—';
+document.getElementById('ttl').textContent=D.client+' 様';
+document.getElementById('upd').textContent='制作した動画の一覧 ・ '+D.updated+' 時点';
+document.title=D.client+' 動画ライブラリ';
+const months=[...new Set(D.videos.map(v=>v.month))].sort().reverse();
+const sel=document.getElementById('m');
+sel.innerHTML='<option value="">すべての月</option>'+months.map(m=>'<option value="'+m+'">'+ml(m)+'（'+D.videos.filter(v=>v.month===m).length+'本）</option>').join('');
+const nowM=D.updated.slice(0,7).replace('/','-');
+const thisMonth=D.videos.filter(v=>v.month===nowM).length;
+document.getElementById('tiles').innerHTML=
+  '<div class="tile"><span class="l">これまでの制作本数</span><span class="v">'+D.videos.length+'<small> 本</small></span></div>'
+ +'<div class="tile"><span class="l">今月（'+Number(nowM.slice(5))+'月）の本数</span><span class="v">'+thisMonth+'<small> 本</small></span></div>'
+ +'<div class="tile"><span class="l">完成した動画</span><span class="v">'+D.videos.filter(v=>v.st==='done').length+'<small> 本</small></span></div>'
+ +'<div class="tile"><span class="l">次の投稿予定</span><span class="v" style="font-size:22px">'+(()=>{const n=D.videos.filter(v=>v.date&&v.date>=D.today).sort((a,b)=>a.date.localeCompare(b.date))[0];return n?n.date.slice(5).replace('-','/'):'—'})()+'</span></div>';
+let stF='';
+function render(){
+  const q=document.getElementById('q').value.trim().toLowerCase(),mF=sel.value;
+  const vs=D.videos.filter(v=>(!q||v.title.toLowerCase().includes(q))&&(!mF||v.month===mF)&&(!stF||v.st===stF));
+  const list=document.getElementById('list');
+  if(!vs.length){list.innerHTML='<div class="empty">条件に合う動画はありません。</div>';return}
+  const ms=[...new Set(vs.map(v=>v.month))].sort().reverse();
+  list.innerHTML=ms.map((m,i)=>{const rows=vs.filter(v=>v.month===m).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    return'<details class="month"'+(D.print||i<3||q||mF?' open':'')+'><summary><h2>'+ml(m)+'</h2><span class="cnt"><b>'+rows.length+'</b> 本</span></summary><div class="colhead"><span>動画</span><span>日程</span><span></span></div>'
+      +rows.map(v=>'<div class="row"><div class="t"><b>'+esc(v.title)+'</b><span class="st '+v.st+'">'+ST[v.st]+'</span></div><div class="dates">'+dateBox('due',v.st==='done'?'完成日':'完成予定日',v.due)+dateBox('post','投稿日',v.date,v.date?(v.date<=D.today?'投稿済':'予定'):'')+'</div><div class="links">'
+        +(v.links.length?v.links.map((l,j)=>'<a'+(j?' class="sub"':'')+' href="'+esc(l.u)+'" target="_blank" rel="noopener">'+esc(l.k)+'</a>').join(''):'<span class="none">リンク準備中</span>')+'</div></div>').join('')+'</details>'}).join('<div style="height:12px"></div>');
+}
+document.getElementById('q').addEventListener('input',render);
+sel.addEventListener('change',render);
+document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{stF=b.dataset.st;document.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()}));
+render();
+if(D.sns&&D.sns.length){
+  const el=document.getElementById('sns');el.hidden=false;
+  const P={ig:'Instagram',tt:'TikTok',yts:'YouTube ショート',ytl:'YouTube'};
+  el.innerHTML='<h2>SNSに投稿された動画と再生数</h2><div class="scroll"><table><thead><tr><th>投稿日</th><th>媒体</th><th>動画</th><th class="r">再生</th><th class="r">いいね</th></tr></thead><tbody>'
+    +D.sns.map(v=>'<tr><td class="num">'+v.date.slice(5).replace('-','/')+'</td><td>'+P[v.p]+'</td><td class="w">'+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="r num">'+fmt(v.views)+'</td><td class="r num">'+fmt(v.likes)+'</td></tr>').join('')
+    +'</tbody></table></div><p style="margin:0;font-size:12px;color:var(--muted)">再生数・いいねは '+esc(D.snsAt)+' 時点の数字です。</p>';
+}
+})();
+</script>
+
+</body></html>

@@ -1,0 +1,168 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body>
+<title>鎌倉プロテ 動画ライブラリ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Barlow+Semi+Condensed:wght@500;600&display=swap">
+<style>
+/* Layout: a client's own video shelf — summary strip, search/filter bar, then one section per month (newest first) with a row per video. */
+:root{
+  --bg:#f6f5f1; --surface:#ffffff; --sunk:#efeee8; --ink:#1d2a38; --muted:#5d6874; --line:#dedcd3;
+  --accent:#22405f; --accent-ink:#ffffff; --done:#1f7a52; --wait:#a86a00; --wip:#3b6aa0;
+  --font:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+  --num:"Barlow Semi Condensed","Zen Kaku Gothic New",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --surface:#1a2129; --sunk:#151b22; --ink:#e7ebef; --muted:#9aa6b2; --line:#2b3540;
+  --accent:#9cc0e4; --accent-ink:#12171d; --done:#4cc28c; --wait:#e2b44a; --wip:#7fb0e6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --surface:#1a2129; --sunk:#151b22; --ink:#e7ebef; --muted:#9aa6b2; --line:#2b3540;
+  --accent:#9cc0e4; --accent-ink:#12171d; --done:#4cc28c; --wait:#e2b44a; --wip:#7fb0e6; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.6}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 64px;padding-inline:16px;display:grid;gap:22px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+header{display:grid;gap:4px;border-bottom:2px solid var(--accent);padding-bottom:14px}
+header .eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted)}
+header h1{margin:0;font-size:26px;text-wrap:balance}
+header .upd{font-size:12px;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile .v{font-family:var(--num);font-size:30px;font-weight:600;line-height:1.1}
+.tile .v small{font-size:14px;color:var(--muted);font-weight:500}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar input,.bar select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+.bar input{flex:1 1 220px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 12px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.month{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.month summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:14px 16px;background:var(--sunk)}
+.month summary::-webkit-details-marker{display:none}
+.month summary h2{margin:0;font-size:17px}
+.month summary .cnt{font-size:13px;color:var(--muted)}
+.month summary .cnt b{font-family:var(--num);font-size:20px;color:var(--ink)}
+.month summary::after{content:"▾";color:var(--muted);margin-left:8px}
+.month:not([open]) summary::after{content:"▸"}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 300px 200px;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.dates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dt{display:grid;gap:1px;padding:6px 10px;border-radius:8px;background:var(--sunk)}
+.dt .k{font-size:11px;color:var(--muted);letter-spacing:.04em}
+.dt .v{font-family:var(--num);font-size:16px;font-weight:600;line-height:1.2}
+.dt .v small{font-family:var(--font);font-size:11px;font-weight:500;color:var(--muted);margin-left:2px}
+.dt.post{border-left:3px solid var(--accent)}
+.dt.post .tag{font-size:10px;font-weight:700;color:var(--accent)}
+.dt.none .v{font-size:13px;color:var(--muted);font-weight:500}
+.colhead{display:grid;grid-template-columns:minmax(0,1fr) 300px 200px;gap:14px;padding:8px 16px 0;font-size:11px;color:var(--muted)}
+.row .t{min-width:0}
+.row .t b{display:block;overflow-wrap:anywhere}
+.st{display:inline-block;font-size:11px;font-weight:700;border:1px solid currentColor;border-radius:999px;padding:0 8px;margin-top:3px}
+.st.done{color:var(--done)} .st.wait{color:var(--wait)} .st.wip{color:var(--wip)}
+.links{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.links a{font-size:12px;font-weight:700;text-decoration:none;color:var(--accent-ink);background:var(--accent);border-radius:8px;padding:6px 10px;white-space:nowrap}
+.links a.sub{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.links .none{font-size:12px;color:var(--muted)}
+@media (max-width:720px){.row{grid-template-columns:minmax(0,1fr)}.links{justify-content:flex-start}.colhead{display:none}}
+.sns{display:grid;gap:10px}
+.sns h2{font-size:17px;margin:0}
+.sns table{width:100%;border-collapse:collapse;font-size:13px}
+.sns th,.sns td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.sns th{font-size:11px;color:var(--muted);font-weight:500;background:var(--sunk)}
+.sns td.r,.sns th.r{text-align:right}
+.sns td.w{white-space:normal;min-width:160px}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:12px}
+footer{font-size:12px;color:var(--muted)}
+/* PDF / printing: light palette, every month open, no filter bar, rows kept whole */
+@page{size:A4;margin:12mm 10mm}
+@media print{
+  :root,:root:not([data-theme="light"]){--bg:#fff;--surface:#fff;--sunk:#f1f3f6;--ink:#1d2a38;--muted:#5d6874;--line:#d9dde3;--accent:#22405f;--accent-ink:#fff;--done:#1f7a52;--wait:#a86a00;--wip:#3b6aa0;color-scheme:light}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:12px}
+  .wrap{max-width:none;padding:0;gap:14px}
+  .bar{display:none}
+  .row{grid-template-columns:minmax(0,1fr) 260px 170px;padding:8px 12px;break-inside:avoid}
+  .colhead{grid-template-columns:minmax(0,1fr) 260px 170px}
+  .month{break-inside:auto}
+  .month summary{break-after:avoid}
+  .month summary::after{content:none}
+  .scroll{overflow:visible}
+  .sns{break-before:page}
+  .sns tr{break-inside:avoid}
+  .pdfonly{display:block}
+}
+.pdfonly{display:none}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">VIDEO LIBRARY</div>
+    <h1 id="ttl"></h1>
+    <div class="upd" id="upd"></div>
+  </header>
+  <section class="tiles" id="tiles" aria-label="概要"></section>
+  <div class="bar">
+    <input id="q" type="search" placeholder="動画名で探す（例：コーティング）" aria-label="動画名で検索">
+    <select id="m" aria-label="月で絞り込む"></select>
+    <div class="chips" role="group" aria-label="状態で絞り込む">
+      <button class="chip" data-st="" aria-pressed="true">すべて</button>
+      <button class="chip" data-st="done" aria-pressed="false">完成</button>
+      <button class="chip" data-st="wait" aria-pressed="false">確認待ち</button>
+      <button class="chip" data-st="wip" aria-pressed="false">制作中</button>
+    </div>
+  </div>
+  <main id="list"></main>
+  <section class="sns" id="sns" hidden></section>
+  <footer>動画のリンクはGoogleドライブ等の共有リンクです。開けない場合は担当者までご連絡ください。<span class="pdfonly">PDF内の「動画を見る」などのボタンを押すと、その動画が開きます。</span></footer>
+</div>
+
+<script id="data" type="application/json">{"client": "鎌倉プロテ", "updated": "2026/10/26", "today": "2026-10-26", "videos": [{"title": "レクサスNX", "date": "2026-10-10", "due": "2026-09-29", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1uYKMc9xYGHeQZ7NHtl0OmULIlNLafGz-/view?usp=drivesdk"}]}, {"title": "bz4x", "date": "2026-08-15", "due": "2026-07-30", "month": "2026-08", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1PyyVdryL2kEjv4TpqEfRFnXV3aSZQxxX/view?usp=drive_link"}]}, {"title": "ポールスミスver2", "date": "2026-11-28", "due": "2026-10-31", "month": "2026-11", "st": "wip", "links": []}, {"title": "ランクル250", "date": "2026-08-08", "due": "2026-07-26", "month": "2026-08", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1Djn0dzeqxsulFAnFbW5aLhMI4r6p1PCf/view?usp=drive_link"}]}, {"title": "カローラGR", "date": "2026-09-19", "due": "2026-09-12", "month": "2026-09", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1-l2ylb_N-vNGsZjpdq_wQMV617xy7uFh/view?usp=drive_link"}]}, {"title": "雨のシミについて", "date": "2026-11-07", "due": "2026-10-18", "month": "2026-11", "st": "wip", "links": []}, {"title": "PV動画", "date": "2026-08-29", "due": "2026-08-16", "month": "2026-08", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1eYWa4ZTvGFxBkfQB9MrT9kQ1uyDQic5z/view?usp=drive_link"}]}, {"title": "PR動画", "date": "2026-09-26", "due": "2026-09-18", "month": "2026-09", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/19FgI67yeU3Iv1agLFz7dJzlam0qdrb1c/view?usp=drive_link"}]}, {"title": "レクサスNX", "date": "2026-10-05", "due": "2026-10-05", "month": "2026-10", "st": "done", "links": []}, {"title": "バディ", "date": "2026-11-21", "due": "2026-10-24", "month": "2026-11", "st": "wait", "links": []}, {"title": "フロントグリル", "date": "2026-10-24", "due": "2026-10-04", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/13TR3tXWzdmq0MdaaHoa6JUmU6oT-OXLW/view?usp=drive_link"}]}, {"title": "その他", "date": "2026-10-31", "due": "2026-10-05", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1n8f9cRxJT30T1AwZ7FJfiphCBizZepEp/view?usp=drive_link"}]}, {"title": "XC90", "date": "2026-09-05", "due": "2026-08-23", "month": "2026-09", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1dMwKvHzz9sM7cR0lpdj8Nodrausu7Ws6/view?usp=drive_link"}]}, {"title": "ポールスミス", "date": "2026-11-14", "due": "2026-10-23", "month": "2026-11", "st": "wait", "links": []}, {"title": "レイバック", "date": "2026-10-17", "due": "2026-10-01", "month": "2026-10", "st": "done", "links": [{"k": "動画を見る", "u": "https://drive.google.com/file/d/1CEZuEzpGMeZ_X1rICVAbLmuRUBRO23uI/view?usp=drivesdk"}]}], "sns": [{"date": "2026-10-09", "p": "ig", "title": "スバルレイバックにコーティング施工。", "url": "https://www.instagram.com/p/DeRZAdJP8Pb/", "views": 2689, "likes": 18}, {"date": "2026-10-09", "p": "tt", "title": "スバルレイバックにコーティング施工。", "url": "https://www.tiktok.com/@kamakuraprote/video/7694627124790971654", "views": 569, "likes": 8}, {"date": "2026-10-09", "p": "yts", "title": "スバルレイバックにコーティング施工。", "url": "https://www.youtube.com/shorts/kzcgypU9lTY", "views": 1732, "likes": 4}, {"date": "2026-10-05", "p": "ig", "title": "レクサスのパールって磨くと綺麗になるの？", "url": "https://www.instagram.com/p/DeHMDJQPU0b/", "views": 10339, "likes": 55}, {"date": "2026-10-05", "p": "tt", "title": "レクサスのパールって磨くと綺麗になるの？", "url": "https://www.tiktok.com/@kamakuraprote/video/7693157134199983412", "views": 1240, "likes": 5}, {"date": "2026-10-05", "p": "yts", "title": "2026年10月5日", "url": "https://www.youtube.com/shorts/4ka3CLXMBfY", "views": 1197, "likes": 5}, {"date": "2026-10-02", "p": "ig", "title": "レクサスnxにコーティング施工。", "url": "https://www.instagram.com/p/Dd_Dyr9vyII/", "views": 16363, "likes": 69}, {"date": "2026-10-02", "p": "tt", "title": "レクサスnxにコーティング施工。", "url": "https://www.tiktok.com/@kamakuraprote/video/7691985247340186932", "views": 6426, "likes": 14}, {"date": "2026-10-02", "p": "yts", "title": "納車したばかりの中古車は綺麗なのか。。", "url": "https://www.youtube.com/shorts/Uwxn-v2jTy8", "views": 10675, "likes": 26}, {"date": "2026-09-24", "p": "ig", "title": "ランクル250の樹脂部分、すぐに劣化しませんか？", "url": "https://www.instagram.com/p/DdqriW7v1Zy/", "views": 13911, "likes": 56}, {"date": "2026-09-24", "p": "tt", "title": "ランクル250の樹脂部分、すぐに劣化しませんか？", "url": "https://www.tiktok.com/@kamakuraprote/video/7689048514394885382", "views": 5173, "likes": 35}, {"date": "2026-09-24", "p": "yts", "title": "ランクル250の樹脂部分、すぐに劣化しませんか？", "url": "https://www.youtube.com/shorts/exV_WRPtgwA", "views": 5496, "likes": 14}, {"date": "2026-09-18", "p": "tt", "title": "GRカローラのスポーティなボディには。。", "url": "https://www.tiktok.com/@kamakuraprote/video/7686825573397695761", "views": 2207, "likes": 14}, {"date": "2026-09-15", "p": "ig", "title": "GRカローラのスポーティなボディには気をつけて下さい。", "url": "https://www.instagram.com/p/DdTkZ7EvR6g/", "views": 22323, "likes": 142}, {"date": "2026-09-15", "p": "yts", "title": "GRカローラのスポーティなボディには気をつけて下さい。 #コーティング #鎌倉 #grカローラ #カローラ", "url": "https://www.youtube.com/shorts/wGUcetocH2c", "views": 4795, "likes": 10}, {"date": "2026-09-04", "p": "ig", "title": "ランクル250にコーティング施工", "url": "https://www.instagram.com/p/Dc3G7eCvzpr/", "views": 6038, "likes": 30}, {"date": "2026-09-04", "p": "yts", "title": "ランクル250にコーティング施工 #コーティング #鎌倉 #ランクル250 #神奈川 #ランクルコーティング #トヨタコーティング", "url": "https://www.youtube.com/shorts/W3oVMR1oWqw", "views": 2114, "likes": 6}], "snsAt": "2026/10/12"}</script>
+<script>
+(function(){
+const D=JSON.parse(document.getElementById('data').textContent);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const W='日月火水木金土';
+const dl=d=>{if(!d)return'';const [y,m,dd]=d.split('-').map(Number);return m+'/'+dd+'<small>（'+W[new Date(y,m-1,dd).getDay()]+'）</small>'};
+const dateBox=(cls,label,d,tag)=>'<div class="dt '+cls+(d?'':' none')+'"><span class="k">'+label+(tag?' <span class="tag">'+tag+'</span>':'')+'</span><span class="v">'+(d?dl(d):'未定')+'</span></div>';
+const ml=m=>{const [y,mo]=m.split('-');return y+'年'+Number(mo)+'月'};
+const ST={done:'完成',wait:'確認待ち',wip:'制作中'};
+const fmt=n=>typeof n==='number'?n.toLocaleString('ja-JP'):'—';
+document.getElementById('ttl').textContent=D.client+' 様';
+document.getElementById('upd').textContent='制作した動画の一覧 ・ '+D.updated+' 時点';
+document.title=D.client+' 動画ライブラリ';
+const months=[...new Set(D.videos.map(v=>v.month))].sort().reverse();
+const sel=document.getElementById('m');
+sel.innerHTML='<option value="">すべての月</option>'+months.map(m=>'<option value="'+m+'">'+ml(m)+'（'+D.videos.filter(v=>v.month===m).length+'本）</option>').join('');
+const nowM=D.updated.slice(0,7).replace('/','-');
+const thisMonth=D.videos.filter(v=>v.month===nowM).length;
+document.getElementById('tiles').innerHTML=
+  '<div class="tile"><span class="l">これまでの制作本数</span><span class="v">'+D.videos.length+'<small> 本</small></span></div>'
+ +'<div class="tile"><span class="l">今月（'+Number(nowM.slice(5))+'月）の本数</span><span class="v">'+thisMonth+'<small> 本</small></span></div>'
+ +'<div class="tile"><span class="l">完成した動画</span><span class="v">'+D.videos.filter(v=>v.st==='done').length+'<small> 本</small></span></div>'
+ +'<div class="tile"><span class="l">次の投稿予定</span><span class="v" style="font-size:22px">'+(()=>{const n=D.videos.filter(v=>v.date&&v.date>=D.today).sort((a,b)=>a.date.localeCompare(b.date))[0];return n?n.date.slice(5).replace('-','/'):'—'})()+'</span></div>';
+let stF='';
+function render(){
+  const q=document.getElementById('q').value.trim().toLowerCase(),mF=sel.value;
+  const vs=D.videos.filter(v=>(!q||v.title.toLowerCase().includes(q))&&(!mF||v.month===mF)&&(!stF||v.st===stF));
+  const list=document.getElementById('list');
+  if(!vs.length){list.innerHTML='<div class="empty">条件に合う動画はありません。</div>';return}
+  const ms=[...new Set(vs.map(v=>v.month))].sort().reverse();
+  list.innerHTML=ms.map((m,i)=>{const rows=vs.filter(v=>v.month===m).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+    return'<details class="month"'+(D.print||i<3||q||mF?' open':'')+'><summary><h2>'+ml(m)+'</h2><span class="cnt"><b>'+rows.length+'</b> 本</span></summary><div class="colhead"><span>動画</span><span>日程</span><span></span></div>'
+      +rows.map(v=>'<div class="row"><div class="t"><b>'+esc(v.title)+'</b><span class="st '+v.st+'">'+ST[v.st]+'</span></div><div class="dates">'+dateBox('due',v.st==='done'?'完成日':'完成予定日',v.due)+dateBox('post','投稿日',v.date,v.date?(v.date<=D.today?'投稿済':'予定'):'')+'</div><div class="links">'
+        +(v.links.length?v.links.map((l,j)=>'<a'+(j?' class="sub"':'')+' href="'+esc(l.u)+'" target="_blank" rel="noopener">'+esc(l.k)+'</a>').join(''):'<span class="none">リンク準備中</span>')+'</div></div>').join('')+'</details>'}).join('<div style="height:12px"></div>');
+}
+document.getElementById('q').addEventListener('input',render);
+sel.addEventListener('change',render);
+document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{stF=b.dataset.st;document.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()}));
+render();
+if(D.sns&&D.sns.length){
+  const el=document.getElementById('sns');el.hidden=false;
+  const P={ig:'Instagram',tt:'TikTok',yts:'YouTube ショート',ytl:'YouTube'};
+  el.innerHTML='<h2>SNSに投稿された動画と再生数</h2><div class="scroll"><table><thead><tr><th>投稿日</th><th>媒体</th><th>動画</th><th class="r">再生</th><th class="r">いいね</th></tr></thead><tbody>'
+    +D.sns.map(v=>'<tr><td class="num">'+v.date.slice(5).replace('-','/')+'</td><td>'+P[v.p]+'</td><td class="w">'+(v.url?'<a href="'+esc(v.url)+'" target="_blank" rel="noopener">'+esc(v.title||'(無題)')+'</a>':esc(v.title||'(無題)'))+'</td><td class="r num">'+fmt(v.views)+'</td><td class="r num">'+fmt(v.likes)+'</td></tr>').join('')
+    +'</tbody></table></div><p style="margin:0;font-size:12px;color:var(--muted)">再生数・いいねは '+esc(D.snsAt)+' 時点の数字です。</p>';
+}
+})();
+</script>
+
+</body></html>
