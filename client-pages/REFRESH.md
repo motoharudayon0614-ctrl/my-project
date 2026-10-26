@@ -16,3 +16,12 @@
    `libraryUpdatedAt`（実際の時刻。`date -u +%Y-%m-%dT%H:%M:%SZ` の出力をそのまま使い、推測で書かない）, `libraryStatus: "done"`（失敗なら `"error"` と `libraryError`）,
    新規作成した場合は `libraryUrl` を書く。50件ずつ `batch` でまとめる。
 6. 更新した社数・失敗したクライアントを日本語で短く報告する。
+
+## 公開ページ（ログイン不要・GitHub Pages）も更新する
+
+Claude を使っていないお客様向け。リンクを知っている人だけがログインなしで開ける（noindex・robots.txt で検索除外）。
+URL は `https://motoharudayon0614-ctrl.github.io/my-project/v/<publicSlug>/` で、`clients/<id>.publicSlug` に保存済み（更新してもリンクは変わらない）。
+
+7. `python3 client-pages/public.py <dump> <out> <site>` を実行（`<out>` は手順3の出力）。
+   出力 JSON の `newSlugs` にあるクライアント（新規）は、`clients/<id>` に `publicSlug` と `publicUrl` を if_version 付き update で書く。
+8. `gh-pages` ブランチを別ディレクトリに checkout し（`git worktree add <dir> gh-pages`）、`v/` を消してから `<site>` の中身をコピーし、commit・push する。
