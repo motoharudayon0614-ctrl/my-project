@@ -6,7 +6,7 @@
 plan.json は学びごとの検索語のリスト（Claude が学びの queries から作る）:
     [{"learningId": "lr_xxx_01", "yt": ["自宅サウナ 後悔"], "tt": ["自宅サウナ"], "ig": ["自宅サウナ"],
       "exclude": ["クライアントのアカウント名"]}]
-  - yt: YouTube の検索語（ログイン不要の検索ページから取る。Apify は使わない）
+  - yt: YouTube の検索語（ログイン不要の検索ページから取る。取れない環境では Apify streamers~youtube-scraper の検索）
   - tt: TikTok の検索語（Apify clockworks~tiktok-scraper の検索）
   - ig: Instagram のハッシュタグ（# なし。Apify apify~instagram-hashtag-scraper のリール）
   - exclude: 除くアカウント（部分一致。自社・クライアント自身など）
@@ -107,6 +107,25 @@ def youtube(q):
 
 # ---------- Apify（Instagram・TikTok） ----------
 
+def youtube_apify(queries, limit):
+    """検索ページが開けない環境（クラウドなど）用。Apify で同じ検索をする。"""
+    items = run_actor("streamers~youtube-scraper", {"searchQueries": queries, "maxResults": limit,
+                                                    "maxResultsShorts": limit, "maxResultStreams": 0})
+    out = []
+    for v in items:
+        url = first(v, "url")
+        if not url:
+            continue
+        posted = first(v, "date", "uploadDate")
+        short = "/shorts/" in url or str(first(v, "type") or "").lower() in ("shorts", "short")
+        out.append({"url": url, "platform": "yts" if short else "ytl", "title": first(v, "title") or "",
+                    "account": first(v, "channelName"), "views": first(v, "viewCount"),
+                    "likes": first(v, "likes"), "comments": first(v, "commentsCount"),
+                    "postedAt": posted, "age_days": age_of(posted) if posted else None,
+                    "query": first(v, "input", "searchQuery")})
+    return out
+
+
 def call(method, path, body=None, timeout=90):
     token = os.environ.get("APIFY_TOKEN", "")
     req = urllib.request.Request(API + path, method=method, data=json.dumps(body).encode() if body is not None else None,
@@ -199,15 +218,26 @@ def main():
     plan = json.load(open(a.plan, encoding="utf-8"))
     rows, errors = [], []
 
+    yt_failed = []
     for p in plan:
         for q in p.get("yt") or []:
             try:
                 for r in youtube(q):
                     if relevant(r["title"], q):
                         rows.append(dict(r, query=q, learningId=p["learningId"]))
-            except Exception as e:  # 1つ失敗しても残りは続ける
-                errors.append("YouTube「%s」：%s" % (q, e))
+            except Exception:  # 検索ページが開けないときは、あとで Apify でまとめて探す
+                yt_failed.append(q)
         time.sleep(1)
+    if yt_failed:
+        try:
+            found = youtube_apify(yt_failed, a.limit)
+            print("yt(Apify): %d件" % len(found), file=sys.stderr)
+            for r in found:
+                p = owner_of(r, plan, "yt")
+                if p and relevant(r["title"], r.get("query") or " ".join(p.get("yt") or [])):
+                    rows.append(dict(r, query=r.get("query") or "", learningId=p["learningId"]))
+        except Exception as e:
+            errors.append("YouTube（検索ページもApifyも失敗）：%s" % e)
 
     for key, fn in (("tt", tiktok), ("ig", instagram)):
         terms = sorted({x for p in plan for x in p.get(key) or []})
