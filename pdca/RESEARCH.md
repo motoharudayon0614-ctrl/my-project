@@ -18,12 +18,15 @@
    - 学びの `platforms` が1媒体だけなら、その媒体の検索語を多めにする
    - `exclude` にはクライアントの `name`・`aliases`、`ig`/`tt`/`yt` のアカウント名を入れる
 6. `curl -s -o /dev/null -w '%{http_code}' https://api.apify.com/v2/users/me` が 200 か確かめる。200 でなければ plan.json の `tt`・`ig` を空にして YouTube だけで続け、報告に書く。
-7. `python3 pdca/search.py work/plan.json --out work/found.json --months 3 --min-views 10000 --limit 20` を実行する。
-   10,000 回以上が少ない分野なら `--min-views 3000` でもう一度。
+7. `python3 pdca/search.py work/plan.json --out work/found.json --months 3 --min-views 100000 --limit 20` を実行する。
+   **参考動画の条件（固定）：投稿日が直近3か月以内・再生10万回以上・広告/タイアップ/商品リンク付き/TikTokShop/アフィリエイト（「プロフィールのリンクから」等）ではないもの。**
+   search.py は広告らしいものを自動で除く（`--allow-ads` は使わない）。
+   条件を満たす動画が3本未満のときだけ `--min-views 50000` でもう一度取り、その旨を手順10の `note` に書く（例「10万回以上が少ないため5万回以上で補充」）。
 8. `found.json` から、学びごとに1〜3本、合計5〜10本を選ぶ。選ぶ基準：
    - クライアントの業種・お客様に関係があり、型（フック・構成）を真似できる。関係のない広告・ドラマ・海外・芸能人頼みのものは選ばない
+   - キャプションやアカウントから広告・案件・商品紹介アフィリエイトだと分かるものは、自動で残っていても選ばない
+   - 投稿日が分からないもの（YouTube ショート等）は、日付が分かるものが足りないときだけ選び、`why` に「投稿日不明」と書く
    - `research` に同じ `url` があるものは選ばない
-   - 直近3か月で10万回以上を優先。少なければ、そのアカウントの普段より目立って伸びているもの
    - なるべく媒体を散らす（YouTube だけにならないように）
 9. 選んだものを `research` に `set` で登録する（`batch` で1回）：`url`・`title`（内容をひとこと）・`platform`・`views`・`account`・`postedAt`・
    `source`（YouTube検索／Instagram検索／TikTok検索）・`hook`・`format`（README の選択肢から）・`why`（伸びた理由。タイトル・キャプション・数字からの推測なので「推測：」を付ける）・

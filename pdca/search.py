@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """学びの「次に探す条件」から、YouTube・Instagram・TikTok の参考動画の候補を集める。
 
-    python3 pdca/search.py plan.json --out found.json [--months 3] [--min-views 10000] [--limit 20]
+    python3 pdca/search.py plan.json --out found.json [--months 3] [--min-views 100000] [--limit 20] [--allow-ads]
 
 plan.json は学びごとの検索語のリスト（Claude が学びの queries から作る）:
     [{"learningId": "lr_xxx_01", "yt": ["自宅サウナ 後悔"], "tt": ["自宅サウナ"], "ig": ["自宅サウナ"],
@@ -13,6 +13,7 @@ plan.json は学びごとの検索語のリスト（Claude が学びの queries 
 
 出力は {"items": [...], "errors": [...]}。items は再生数の多い順で、
 url, platform(ig/tt/yts/ytl), title, account, views, likes, comments, postedAt, age_days, query, learningId。
+広告・タイアップ・商品リンク付き・アフィリエイトらしいもの（ad=True）は、--allow-ads を付けない限り除く。
 Apify のトークンは APIFY_TOKEN か、環境の「API認証情報」（api.apify.com へ自動で付く）から。
 """
 import argparse, datetime as dt, json, os, re, subprocess, sys, time, unicodedata, urllib.parse, urllib.request
@@ -31,6 +32,21 @@ def relevant(title, q):
     """検索語のどれか（2文字以上）がタイトルに入っているものだけ残す（混ざる広告・ドラマを落とす）。"""
     words = [w for w in norm(q).replace("#", " ").split() if len(w) >= 2]
     return not words or any(w in norm(title) for w in words)
+
+
+AD_TEXT = re.compile(r"[#＃]\s*(pr|ad|sponsored|プロモーション|タイアップ)\b|有償の?パートナーシップ|タイアップ|案件|提供[:：]|tiktok\s*shop|tiktokショップ|"
+                     r"プロフィール欄?の?リンク|購入はこちら|商品リンク|リンクから(購入|検索)|クーポンコード|楽天room|amazon(で|の)", re.I)
+AD_KEYS = ("isAd", "isSponsored", "isPaidPartnership", "paidPartnership", "adAuthorization", "brandOrganicType",
+           "adLabelVersion", "isECVideo", "sponsors", "anchors")
+
+
+def is_ad(raw, text):
+    """広告・タイアップ・商品リンク付き・アフィリエイトらしいものを見分ける（フラグとキャプションの両方で）。"""
+    for k in AD_KEYS:
+        v = raw.get(k) if isinstance(raw, dict) else None
+        if v not in (None, False, 0, "", [], {}):
+            return True
+    return bool(AD_TEXT.search(unicodedata.normalize("NFKC", text or "")))
 
 
 def age_of(iso):
@@ -136,7 +152,7 @@ def tiktok(queries, limit):
                     "account": first(v, "authorMeta.name", "authorMeta.nickName"),
                     "views": first(v, "playCount"), "likes": first(v, "diggCount"), "comments": first(v, "commentCount"),
                     "postedAt": posted, "age_days": age_of(posted) if posted else None,
-                    "query": first(v, "searchQuery", "input")})
+                    "query": first(v, "searchQuery", "input"), "ad": is_ad(v, first(v, "text"))})
     return out
 
 
@@ -154,7 +170,8 @@ def instagram(tags, limit):
                     "views": first(v, "videoPlayCount", "videoViewCount", "playsCount"),
                     "likes": first(v, "likesCount"), "comments": first(v, "commentsCount"),
                     "postedAt": posted, "age_days": age_of(posted) if posted else None,
-                    "query": urllib.parse.unquote(src.rstrip("/").split("/")[-1]) if (src := first(v, "inputUrl", "hashtag")) else None})
+                    "query": urllib.parse.unquote(src.rstrip("/").split("/")[-1]) if (src := first(v, "inputUrl", "hashtag")) else None,
+                    "ad": is_ad(v, first(v, "caption"))})
     return out
 
 
@@ -175,7 +192,8 @@ def main():
     ap.add_argument("plan")
     ap.add_argument("--out", default="found.json")
     ap.add_argument("--months", type=int, default=3)
-    ap.add_argument("--min-views", type=int, default=10000)
+    ap.add_argument("--min-views", type=int, default=100000)
+    ap.add_argument("--allow-ads", action="store_true", help="広告・タイアップ・アフィリエイトらしい動画も残す")
     ap.add_argument("--limit", type=int, default=20, help="Instagram・TikTok の検索語1つあたりの取得数（Apify の料金に効く）")
     a = ap.parse_args()
     plan = json.load(open(a.plan, encoding="utf-8"))
@@ -210,6 +228,8 @@ def main():
     seen, out = set(), []
     for r in sorted(rows, key=lambda r: -(r.get("views") or 0)):
         if r["url"] in seen or (r.get("views") or 0) < a.min_views:
+            continue
+        if not a.allow_ads and (r.get("ad") or is_ad({}, r.get("title"))):
             continue
         if r.get("age_days") is not None and r["age_days"] > 30 * a.months:
             continue
