@@ -23,5 +23,6 @@ Claude を使っていないお客様向け。リンクを知っている人だ�
 URL は `https://motoharudayon0614-ctrl.github.io/my-project/v/<publicSlug>/` で、`clients/<id>.publicSlug` に保存済み（更新してもリンクは変わらない）。
 
 7. `python3 client-pages/public.py <dump> <out> <site>` を実行（`<out>` は手順3の出力）。
-   出力 JSON の `newSlugs` にあるクライアント（新規）は、`clients/<id>` に `publicSlug` と `publicUrl` を if_version 付き update で書く。
-8. `gh-pages` ブランチを別ディレクトリに checkout し（`git worktree add <dir> gh-pages`）、`v/` を消してから `<site>` の中身をコピーし、commit・push する。
+   出力 JSON の `newSlugs` / `newNos` にあるクライアント（新規）は、`clients/<id>` に `publicSlug`・`publicUrl`・`publicNo` を if_version 付き update で書く。
+   同時に `l/a8Qm3vTzK7pWn2Rx.csv`（No・会社名・公開リンク・動画本数・更新日時）も出力される。管理用のGoogleスプレッドシート「動画ライブラリ 公開リンク一覧」がこれを IMPORTDATA で読み込むので、push すれば一覧表も自動で最新になる。
+8. `gh-pages` ブランチを別ディレクトリに checkout し（`git worktree add <dir> gh-pages`）、`v/` と `l/` を消してから `<site>` の中身をコピーし、commit・push する。
